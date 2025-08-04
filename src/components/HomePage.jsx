@@ -2,12 +2,12 @@ import React, { useState } from "react";
 import StarField from "./StarField";
 import "./HomePage.css";
 
-const HomePage = ({ onEnter }) => {
+const HomePage = ({ onEnter, loadingDb, dbLoaded }) => {
   const [nationId, setNationId] = useState("");
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (nationId.trim()) {
+    if (nationId.trim() && !loadingDb) {
       onEnter(nationId.trim());
     }
   };
@@ -32,15 +32,21 @@ const HomePage = ({ onEnter }) => {
               placeholder="Enter Nation ID"
               className="nation-input"
               required
+              disabled={loadingDb}
             />
           </div>
-          <button type="submit" className="enter-button">
-            Enter Command Center
+          <button type="submit" className="enter-button" disabled={loadingDb}>
+            {loadingDb ? "Loading Database..." : "Enter Command Center"}
           </button>
         </form>
 
         <div className="info-section">
           <p>Enter your nation ID to access your command center</p>
+          {dbLoaded && !loadingDb && (
+            <p style={{ color: "#00f5ff", fontSize: "14px" }}>
+              ✓ Database cached and ready
+            </p>
+          )}
         </div>
       </div>
     </div>

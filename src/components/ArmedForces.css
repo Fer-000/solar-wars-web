@@ -27,6 +27,10 @@
   padding: 80px 20px 40px;
   max-width: 1400px;
   margin: 0 auto;
+  /* Make container scrollable on mobile */
+  height: 100vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .header-section {
@@ -331,6 +335,11 @@
 }
 
 .unit-button {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Improved mobile scroll for vehicles */
+.unit-button {
   background: linear-gradient(135deg, rgba(0, 245, 255, 0.1), rgba(255, 107, 107, 0.1));
   border: 1px solid rgba(0, 245, 255, 0.3);
   border-radius: 10px;
@@ -341,6 +350,7 @@
   text-align: left;
   min-height: 100px;
   display: flex;
+  -webkit-overflow-scrolling: touch;
   flex-direction: column;
   justify-content: space-between;
 }

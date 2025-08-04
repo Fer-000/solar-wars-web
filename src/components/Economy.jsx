@@ -1,8 +1,18 @@
 import React from "react";
 import StarField from "./StarField";
+import globalDB from "../services/GlobalDB";
 import "./CenterPage.css";
 
-const Economy = ({ onBack, nationName }) => {
+const Economy = ({ onBack, nationName, dbLoaded }) => {
+  if (!dbLoaded) {
+    return (
+      <div className="center-page">
+        <div style={{ textAlign: "center", padding: "80px" }}>
+          <h2>Loading database...</h2>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="center-page">
       <StarField density={120} />

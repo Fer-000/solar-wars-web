@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import HomePage from "./components/HomePage";
 import Dashboard from "./components/Dashboard";
 import Settings from "./components/Settings";
@@ -6,6 +6,8 @@ import Economy from "./components/Economy";
 import Shipyards from "./components/Shipyards";
 import ArmedForces from "./components/ArmedForces";
 import HeaderMenu from "./components/HeaderMenu";
+import databaseService from "./services/database";
+import globalDB from "./services/GlobalDB";
 import "./App.css";
 
 function App() {
@@ -16,8 +18,39 @@ function App() {
     nationName: "",
     themeColor: "#646cff",
   });
+  const [dbLoaded, setDbLoaded] = useState(globalDB.isLoaded());
+  const [loadingDb, setLoadingDb] = useState(false);
 
-  const handleEnter = (id) => {
+  // Check if DB is already cached on app load
+  useEffect(() => {
+    if (globalDB.isLoaded()) {
+      setDbLoaded(true);
+    }
+  }, []);
+
+  const fetchAndCacheDB = async () => {
+    setLoadingDb(true);
+    try {
+      // Fetch entire DB and cache it
+      const allServers = await databaseService.listCollections();
+      const dbData = {};
+      for (const server of allServers) {
+        dbData[server] = await databaseService.getFactions(server);
+      }
+      globalDB.set(dbData);
+      setDbLoaded(true);
+    } catch (error) {
+      console.error("Error fetching database:", error);
+    } finally {
+      setLoadingDb(false);
+    }
+  };
+
+  const handleEnter = async (id) => {
+    // Only fetch if not already cached
+    if (!globalDB.isLoaded()) {
+      await fetchAndCacheDB();
+    }
     setNationId(id);
     setUserSettings((prev) => ({ ...prev, nationName: prev.nationName || id }));
     setCurrentView("dashboard");
@@ -35,9 +68,11 @@ function App() {
     setUserSettings((prev) => ({ ...prev, ...newSettings }));
   };
 
-  const handleBackToHome = () => {
+  const handleBackToHome = async () => {
     setCurrentView("home");
     setNationId("");
+    // Optionally refresh cache when returning to homepage
+    await fetchAndCacheDB();
   };
 
   const handleBackToDashboard = () => {
@@ -45,7 +80,13 @@ function App() {
   };
 
   if (currentView === "home") {
-    return <HomePage onEnter={handleEnter} />;
+    return (
+      <HomePage
+        onEnter={handleEnter}
+        loadingDb={loadingDb}
+        dbLoaded={dbLoaded}
+      />
+    );
   }
 
   if (currentView === "dashboard") {
@@ -55,6 +96,7 @@ function App() {
         userSettings={userSettings}
         onNavigation={handleNavigation}
         onSettings={handleSettings}
+        dbLoaded={dbLoaded}
       />
     );
   }
@@ -74,6 +116,7 @@ function App() {
       <Economy
         onBack={handleBackToDashboard}
         nationName={userSettings.nationName || nationId}
+        dbLoaded={dbLoaded}
       />
     );
   }
@@ -84,6 +127,7 @@ function App() {
         onBack={handleBackToDashboard}
         nationName={userSettings.nationName || nationId}
         themeColor={userSettings.themeColor}
+        dbLoaded={dbLoaded}
       />
     );
   }
@@ -93,6 +137,7 @@ function App() {
       <ArmedForces
         onBack={handleBackToDashboard}
         nationName={userSettings.nationName || nationId}
+        dbLoaded={dbLoaded}
       />
     );
   }

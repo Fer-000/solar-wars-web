@@ -93,16 +93,19 @@ class DatabaseService {
 
   // Get all faction data for a server (matches bot's getFactions function)
   async getFactions(server = "The Solar Wars") {
+    // Use globalDB if loaded
     try {
+      const globalDB = (await import("./GlobalDB")).default;
+      const cached = globalDB.getFactions(server);
+      if (cached && Object.keys(cached).length > 0) return cached;
+      // Fallback to Firestore
       const collectionRef = collection(db, server);
       const snapshot = await getDocs(collectionRef);
       const factions = {};
-      
       snapshot.forEach((doc) => {
         const rawData = doc.data();
         factions[doc.id] = this.convertFirestoreData(rawData);
       });
-      
       this.cache[server] = factions;
       return factions;
     } catch (error) {
@@ -113,18 +116,19 @@ class DatabaseService {
 
   // Get specific faction data (matches bot's getFaction function)
   async getFaction(server = "The Solar Wars", factionId) {
+    // Use globalDB if loaded
     try {
+      const globalDB = (await import("./GlobalDB")).default;
+      const cached = globalDB.getFaction(server, factionId);
+      if (cached) return cached;
+      // Fallback to Firestore
       const docRef = doc(db, server, factionId.toLowerCase());
       const docSnap = await getDoc(docRef);
-      
       if (docSnap.exists()) {
         const rawData = docSnap.data();
         const convertedData = this.convertFirestoreData(rawData);
-        console.log(`📊 Raw data for ${factionId}:`, rawData);
-        console.log(`🔄 Converted data for ${factionId}:`, convertedData);
         return convertedData;
       } else {
-        console.log('No such faction:', factionId);
         return null;
       }
     } catch (error) {
@@ -138,15 +142,16 @@ class DatabaseService {
     try {
       const docRef = doc(db, server, factionId.toLowerCase());
       await updateDoc(docRef, newData);
-      
-      // Update cache if it exists
+      // Update globalDB cache
+      const globalDB = (await import("./GlobalDB")).default;
+      globalDB.updateFaction(server, factionId, newData);
+      // Update local cache
       if (this.cache[server] && this.cache[server][factionId.toLowerCase()]) {
         this.cache[server][factionId.toLowerCase()] = {
           ...this.cache[server][factionId.toLowerCase()],
           ...newData
         };
       }
-      
       return true;
     } catch (error) {
       console.error('Error updating faction:', error);

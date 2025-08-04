@@ -2,13 +2,28 @@ import React, { useState, useEffect } from "react";
 import StarField from "./StarField";
 import TacticalMap from "./TacticalMap";
 import databaseService from "../services/database";
+import globalDB from "../services/GlobalDB";
 import "./CenterPage.css";
 import "./ArmedForces.css";
 
-const ArmedForces = ({ onBack, nationName = "athena" }) => {
+const ArmedForces = ({ onBack, nationName = "athena", dbLoaded }) => {
+  if (!dbLoaded) {
+    return (
+      <div className="armed-forces">
+        <div style={{ textAlign: "center", padding: "80px" }}>
+          <h2>Loading database...</h2>
+        </div>
+      </div>
+    );
+  }
   const [editUnitName, setEditUnitName] = useState("");
   const [editUnitType, setEditUnitType] = useState("");
   const [editUnitLocation, setEditUnitLocation] = useState("");
+  // For vehicle transfer UI
+  const [transferTargetFleetId, setTransferTargetFleetId] = useState(null);
+  const [transferAmounts, setTransferAmounts] = useState({});
+  const [inputAmountsSource, setInputAmountsSource] = useState({});
+  const [inputAmountsDest, setInputAmountsDest] = useState({});
   const [selectedUnit, setSelectedUnit] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [units, setUnits] = useState([]);
@@ -142,6 +157,11 @@ const ArmedForces = ({ onBack, nationName = "athena" }) => {
     setEditUnitType(unit.type || "Space");
     setEditUnitLocation(unit.location || "");
     setSelectedUnit(unit);
+    // Reset transfer state when opening modal
+    setTransferTargetFleetId(null);
+    setTransferAmounts({});
+    setInputAmountsSource({});
+    setInputAmountsDest({});
     setShowModal(true);
   };
 
@@ -263,22 +283,73 @@ const ArmedForces = ({ onBack, nationName = "athena" }) => {
         Location: editUnitLocation || fleets[fleetIndex].State.Location,
       };
 
+      // If transferTargetFleetId is set, perform vehicle transfer
+      if (transferTargetFleetId && Object.keys(transferAmounts).length > 0) {
+        const targetFleetIndex = fleets.findIndex(
+          (f) => f.ID === transferTargetFleetId
+        );
+        if (targetFleetIndex !== -1) {
+          // For each vehicle type, move the specified amount
+          Object.entries(transferAmounts).forEach(([vehicleName, amount]) => {
+            if (amount <= 0) return; // Skip if no transfer
+
+            // Find vehicle by name in allVehicles to get ID
+            const vehicleData = allVehicles.find((v) => v.name === vehicleName);
+            if (!vehicleData) return;
+
+            // Remove from source fleet
+            const sourceVehicle = fleets[fleetIndex].Vehicles.find(
+              (v) => v.ID === vehicleData.ID
+            );
+            if (sourceVehicle && sourceVehicle.count >= amount) {
+              sourceVehicle.count -= amount;
+              // Remove vehicle entry if count becomes 0
+              if (sourceVehicle.count === 0) {
+                fleets[fleetIndex].Vehicles = fleets[
+                  fleetIndex
+                ].Vehicles.filter((v) => v.ID !== vehicleData.ID);
+              }
+            }
+
+            // Add to target fleet
+            let targetVehicle = fleets[targetFleetIndex].Vehicles.find(
+              (v) => v.ID === vehicleData.ID
+            );
+            if (!targetVehicle) {
+              // If not present, add new vehicle entry
+              targetVehicle = { ID: vehicleData.ID, count: 0 };
+              fleets[targetFleetIndex].Vehicles.push(targetVehicle);
+            }
+            targetVehicle.count += amount;
+          });
+        }
+      }
       // Write to database
       await databaseService.updateFleets("The Solar Wars", nationName, fleets);
 
-      // Update local state
-      setUnits((prev) =>
-        prev.map((u) =>
-          u.id === selectedUnit.id
-            ? {
-                ...u,
-                name: editUnitName,
-                type: editUnitType,
-                location: editUnitLocation,
-              }
-            : u
-        )
+      // Reset transfer state
+      setTransferTargetFleetId(null);
+      setTransferAmounts({});
+
+      // Reload faction data to refresh all fleet information
+      const factionData = await databaseService.getFactionInfo(
+        "The Solar Wars",
+        nationName
       );
+      if (factionData) {
+        const convertedUnits = databaseService.convertFleetsToUnits(
+          factionData.fleets,
+          factionData.vehicles
+        );
+        setUnits(convertedUnits);
+
+        const totals = databaseService.calculateVehicleTotalsFromFleets(
+          factionData.fleets,
+          factionData.vehicles
+        );
+        setVehicleAssets(totals);
+      }
+
       setShowEditModal(false);
       console.log("Unit changes saved successfully");
     } catch (err) {
@@ -390,6 +461,9 @@ const ArmedForces = ({ onBack, nationName = "athena" }) => {
   const closeTacticalMap = () => {
     setShowTacticalMap(false);
   };
+
+  // Mobile responsive helper
+  const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
 
   return (
     <div className="armed-forces">
@@ -778,24 +852,405 @@ const ArmedForces = ({ onBack, nationName = "athena" }) => {
                     <option value="Ground">Ground</option>
                   </select>
                 </div>
-                <div className="edit-section">
-                  <h4>Unit Location</h4>
-                  <input
-                    type="text"
-                    className="unit-location-input"
-                    value={editUnitLocation}
-                    onChange={(e) => setEditUnitLocation(e.target.value)}
-                    placeholder="Enter location (e.g. Mars Orbit)"
-                  />
-                </div>
+
                 <div className="edit-section">
                   <h4>Transfer Vehicles</h4>
                   <p>
-                    Select destination fleet and vehicle amounts to transfer
+                    Select destination fleet and move vehicles between fleets.
                   </p>
-                  {/* TODO: Add vehicle transfer interface */}
-                  <div className="transfer-placeholder">
-                    Vehicle transfer interface will be implemented here
+                  <div
+                    className="vehicle-transfer-ui"
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "16px",
+                    }}
+                  >
+                    <div style={{ minWidth: "200px" }}>
+                      <strong>Destination Fleet:</strong>
+                      <select
+                        value={transferTargetFleetId || ""}
+                        onChange={(e) => {
+                          setTransferTargetFleetId(Number(e.target.value));
+                          setTransferAmounts({}); // Reset transfer amounts when changing fleet
+                          setInputAmountsSource({});
+                          setInputAmountsDest({});
+                        }}
+                        style={{
+                          width: "100%",
+                          marginTop: "8px",
+                          padding: "6px",
+                          borderRadius: "4px",
+                          border: "1px solid #444",
+                        }}
+                      >
+                        <option value="">Select destination fleet...</option>
+                        {units
+                          .filter((u) => u.id !== selectedUnit.id)
+                          .map((fleet) => (
+                            <option key={fleet.id} value={fleet.id}>
+                              {fleet.name} ({fleet.ships} vehicles)
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                    {transferTargetFleetId &&
+                      selectedUnit.vehicles &&
+                      selectedUnit.vehicles.length > 0 && (
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "24px",
+                            border: "1px solid #444",
+                            borderRadius: "8px",
+                            padding: "16px",
+                            background: "rgba(0,0,0,0.2)",
+                          }}
+                        >
+                          {/* Source fleet vehicles */}
+                          <div style={{ flex: 1 }}>
+                            <div
+                              style={{
+                                fontWeight: "bold",
+                                marginBottom: "12px",
+                                textAlign: "center",
+                                borderBottom: "1px solid #444",
+                                paddingBottom: "8px",
+                                background: "rgba(0, 123, 255, 0.1)",
+                                padding: "8px",
+                                borderRadius: "4px",
+                              }}
+                            >
+                              Source: {selectedUnit.name}
+                            </div>
+                            {selectedUnit.vehicles.map((vehicle) => {
+                              // Get vehicle name from allVehicles database
+                              const vehicleData = allVehicles.find(
+                                (v) => v.ID === vehicle.ID
+                              );
+                              const vehicleName =
+                                vehicleData?.name || `Vehicle ${vehicle.ID}`;
+                              const currentCount =
+                                vehicle.count -
+                                (transferAmounts[vehicleName] || 0);
+                              const inputAmount =
+                                inputAmountsSource[vehicleName] || 1;
+                              return (
+                                <div
+                                  key={vehicle.ID}
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "space-between",
+                                    margin: "8px 0",
+                                    padding: "6px",
+                                    background: "rgba(255,255,255,0.05)",
+                                    borderRadius: "4px",
+                                  }}
+                                >
+                                  <span style={{ flex: 1 }}>{vehicleName}</span>
+                                  <span
+                                    style={{
+                                      minWidth: "40px",
+                                      textAlign: "center",
+                                      fontWeight: "bold",
+                                      color:
+                                        currentCount <= 0 ? "#666" : "#fff",
+                                    }}
+                                  >
+                                    {currentCount}
+                                  </span>
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    max={currentCount}
+                                    value={inputAmount}
+                                    onChange={(e) => {
+                                      let val = Number(e.target.value);
+                                      if (isNaN(val) || val < 1) val = 1;
+                                      if (val > currentCount)
+                                        val = currentCount;
+                                      setInputAmountsSource((prev) => ({
+                                        ...prev,
+                                        [vehicleName]: val,
+                                      }));
+                                    }}
+                                    style={{
+                                      width: "50px",
+                                      marginLeft: "8px",
+                                      padding: "2px 6px",
+                                      borderRadius: "4px",
+                                      border: "1px solid #888",
+                                      background: "#222",
+                                      color: "#fff",
+                                    }}
+                                  />
+                                  <button
+                                    disabled={currentCount <= 0}
+                                    onClick={() => {
+                                      setTransferAmounts((prev) => ({
+                                        ...prev,
+                                        [vehicleName]:
+                                          (prev[vehicleName] || 0) +
+                                          inputAmount,
+                                      }));
+                                    }}
+                                    style={{
+                                      marginLeft: "8px",
+                                      padding: "4px 8px",
+                                      background:
+                                        currentCount > 0 ? "#4CAF50" : "#666",
+                                      border: "none",
+                                      borderRadius: "4px",
+                                      color: "white",
+                                      cursor:
+                                        currentCount > 0
+                                          ? "pointer"
+                                          : "not-allowed",
+                                    }}
+                                  >
+                                    →
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          {/* Transfer summary */}
+                          <div
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              justifyContent: "center",
+                              gap: "8px",
+                              padding: "12px",
+                              background: "rgba(255, 193, 7, 0.1)",
+                              border: "1px solid rgba(255, 193, 7, 0.3)",
+                              borderRadius: "8px",
+                              minHeight: "50px",
+                            }}
+                          >
+                            {Object.entries(transferAmounts).some(
+                              ([, amount]) => amount > 0
+                            ) ? (
+                              <>
+                                <div
+                                  style={{
+                                    width: "100%",
+                                    textAlign: "center",
+                                    fontWeight: "bold",
+                                    marginBottom: "8px",
+                                  }}
+                                >
+                                  Transferring:
+                                </div>
+                                {Object.entries(transferAmounts).map(
+                                  ([vehicleName, amount]) =>
+                                    amount > 0 && (
+                                      <div
+                                        key={vehicleName}
+                                        style={{
+                                          background: "rgba(255, 193, 7, 0.3)",
+                                          padding: "4px 8px",
+                                          borderRadius: "4px",
+                                          fontSize: "14px",
+                                          fontWeight: "bold",
+                                        }}
+                                      >
+                                        {amount}x {vehicleName}
+                                      </div>
+                                    )
+                                )}
+                              </>
+                            ) : (
+                              <div
+                                style={{
+                                  color: "#666",
+                                  fontSize: "14px",
+                                  textAlign: "center",
+                                  width: "100%",
+                                }}
+                              >
+                                No transfers pending
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Destination fleet vehicles */}
+                          <div style={{ flex: 1 }}>
+                            <div
+                              style={{
+                                fontWeight: "bold",
+                                marginBottom: "12px",
+                                textAlign: "center",
+                                borderBottom: "1px solid #444",
+                                paddingBottom: "8px",
+                                background: "rgba(76, 175, 80, 0.1)",
+                                padding: "8px",
+                                borderRadius: "4px",
+                              }}
+                            >
+                              Destination:{" "}
+                              {units.find((u) => u.id === transferTargetFleetId)
+                                ?.name || "Unknown Fleet"}
+                            </div>
+                            {(() => {
+                              const destFleet = units.find(
+                                (u) => u.id === transferTargetFleetId
+                              );
+                              // Get all vehicle names from source fleet for combined display
+                              const sourceVehicleNames =
+                                selectedUnit.vehicles.map((v) => {
+                                  const vehicleData = allVehicles.find(
+                                    (vd) => vd.ID === v.ID
+                                  );
+                                  return vehicleData?.name || `Vehicle ${v.ID}`;
+                                });
+
+                              // Create a combined list of all vehicle types that exist in either fleet
+                              const destVehicleNames =
+                                destFleet?.vehicles?.map((v) => {
+                                  const vehicleData = allVehicles.find(
+                                    (vd) => vd.ID === v.ID
+                                  );
+                                  return vehicleData?.name || `Vehicle ${v.ID}`;
+                                }) || [];
+
+                              const allVehicleTypes = new Set([
+                                ...sourceVehicleNames,
+                                ...destVehicleNames,
+                              ]);
+
+                              return Array.from(allVehicleTypes).map(
+                                (vehicleName) => {
+                                  const destVehicle = destFleet?.vehicles?.find(
+                                    (v) => {
+                                      const vehicleData = allVehicles.find(
+                                        (vd) => vd.ID === v.ID
+                                      );
+                                      return (
+                                        (vehicleData?.name ||
+                                          `Vehicle ${v.ID}`) === vehicleName
+                                      );
+                                    }
+                                  );
+                                  const currentCount =
+                                    (destVehicle?.count || 0) +
+                                    (transferAmounts[vehicleName] || 0);
+                                  const isReceiving =
+                                    (transferAmounts[vehicleName] || 0) > 0;
+                                  const maxRemove =
+                                    transferAmounts[vehicleName] || 0;
+                                  const inputAmount =
+                                    inputAmountsDest[vehicleName] || 1;
+                                  return (
+                                    <div
+                                      key={vehicleName}
+                                      style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "space-between",
+                                        margin: "8px 0",
+                                        padding: "6px",
+                                        background: isReceiving
+                                          ? "rgba(76, 175, 80, 0.1)"
+                                          : "rgba(255,255,255,0.05)",
+                                        borderRadius: "4px",
+                                      }}
+                                    >
+                                      <button
+                                        disabled={maxRemove <= 0}
+                                        onClick={() => {
+                                          setTransferAmounts((prev) => ({
+                                            ...prev,
+                                            [vehicleName]: Math.max(
+                                              0,
+                                              (prev[vehicleName] || 0) -
+                                                inputAmount
+                                            ),
+                                          }));
+                                        }}
+                                        style={{
+                                          marginRight: "8px",
+                                          padding: "4px 8px",
+                                          background:
+                                            maxRemove > 0 ? "#f44336" : "#666",
+                                          border: "none",
+                                          borderRadius: "4px",
+                                          color: "white",
+                                          cursor:
+                                            maxRemove > 0
+                                              ? "pointer"
+                                              : "not-allowed",
+                                        }}
+                                      >
+                                        ←
+                                      </button>
+                                      <input
+                                        type="number"
+                                        min={1}
+                                        max={maxRemove}
+                                        value={inputAmount}
+                                        onChange={(e) => {
+                                          let val = Number(e.target.value);
+                                          if (isNaN(val) || val < 1) val = 1;
+                                          if (val > maxRemove) val = maxRemove;
+                                          setInputAmountsDest((prev) => ({
+                                            ...prev,
+                                            [vehicleName]: val,
+                                          }));
+                                        }}
+                                        style={{
+                                          width: "50px",
+                                          marginRight: "8px",
+                                          padding: "2px 6px",
+                                          borderRadius: "4px",
+                                          border: "1px solid #888",
+                                          background: "#222",
+                                          color: "#fff",
+                                        }}
+                                      />
+                                      <span
+                                        style={{
+                                          minWidth: "40px",
+                                          textAlign: "center",
+                                          fontWeight: "bold",
+                                          color: isReceiving
+                                            ? "#4CAF50"
+                                            : "#fff",
+                                        }}
+                                      >
+                                        {currentCount}
+                                      </span>
+                                      <span
+                                        style={{ flex: 1, textAlign: "right" }}
+                                      >
+                                        {vehicleName}
+                                      </span>
+                                    </div>
+                                  );
+                                }
+                              );
+                            })()}
+                          </div>
+                        </div>
+                      )}
+                    {transferTargetFleetId &&
+                      (!selectedUnit.vehicles ||
+                        selectedUnit.vehicles.length === 0) && (
+                        <div
+                          style={{
+                            textAlign: "center",
+                            padding: "20px",
+                            color: "#666",
+                            border: "1px dashed #444",
+                            borderRadius: "8px",
+                          }}
+                        >
+                          This fleet has no vehicles to transfer
+                        </div>
+                      )}
                   </div>
                 </div>
                 <div className="modal-actions">
@@ -873,7 +1328,11 @@ const ArmedForces = ({ onBack, nationName = "athena" }) => {
 
       {/* Tactical Map Modal */}
       {showTacticalMap && (
-        <TacticalMap onClose={closeTacticalMap} currentFaction={nationName} />
+        <TacticalMap
+          onClose={closeTacticalMap}
+          currentFaction={nationName}
+          dbLoaded={dbLoaded}
+        />
       )}
     </div>
   );

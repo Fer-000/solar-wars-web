@@ -1,8 +1,20 @@
 import React, { useState, useEffect } from "react";
 import databaseService from "../services/database";
+import globalDB from "../services/GlobalDB";
 import "./TacticalMap.css";
 
-const TacticalMap = ({ onClose, currentFaction }) => {
+const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
+  if (!dbLoaded) {
+    return (
+      <div className="tactical-map-overlay">
+        <div className="tactical-map-container">
+          <div style={{ textAlign: "center", padding: "80px" }}>
+            <h2>Loading database...</h2>
+          </div>
+        </div>
+      </div>
+    );
+  }
   const [selectedSystem, setSelectedSystem] = useState(null);
   const [systemData, setSystemData] = useState({});
   const [allFactions, setAllFactions] = useState({});
@@ -12,29 +24,31 @@ const TacticalMap = ({ onClose, currentFaction }) => {
 
   const solarSystems = {
     Sol: [
+      // Ordered by distance from the Sun
       "Mercury",
       "Venus",
       "Earth",
       "Luna",
       "Mars",
-      "Ceres",
       "Jupiter",
+      "Io",
+      "Europa",
       "Ganymede",
       "Callisto",
-      "Europa",
-      "Io",
       "Saturn",
-      "Rhea",
-      "Titan",
+      "Mimas",
       "Enceladus",
       "Tethys",
-      "Mimas",
       "Dione",
+      "Rhea",
+      "Titan",
       "Iapetus",
       "Uranus",
-      "Oberon",
-      "Titania",
       "Miranda",
+      "Ariel",
+      "Umbriel",
+      "Titania",
+      "Oberon",
       "Neptune",
       "Triton",
       "Pluto",
@@ -42,6 +56,47 @@ const TacticalMap = ({ onClose, currentFaction }) => {
     ],
     Corelli: ["Barcas", "Deo Gloria", "Novai", "Scipios"],
   };
+  // Cache planet image error states to avoid rerendering and lag
+  const planetImageErrorCache = React.useRef({});
+  function PlanetImageOrEmoji({ planetName }) {
+    const [error, setError] = useState(
+      planetImageErrorCache.current[planetName] || false
+    );
+    const src = `maps/${planetName}.png`;
+    useEffect(() => {
+      setError(planetImageErrorCache.current[planetName] || false);
+    }, [planetName]);
+    const handleError = () => {
+      planetImageErrorCache.current[planetName] = true;
+      setError(true);
+    };
+    // Accept grayscale as a prop
+    return error ? (
+      <img
+        src={"maps/placeholder.png"}
+        style={{
+          width: 180,
+          height: 180,
+          borderRadius: "50%",
+          display: "inline-block",
+          marginTop: "16px",
+        }}
+        onError={handleError}
+      />
+    ) : (
+      <img
+        src={src}
+        style={{
+          width: 180,
+          height: 180,
+          borderRadius: "50%",
+          display: "inline-block",
+          marginTop: "16px",
+        }}
+        onError={handleError}
+      />
+    );
+  }
 
   // Faction colors
   const factionColors = {
@@ -55,13 +110,14 @@ const TacticalMap = ({ onClose, currentFaction }) => {
   };
 
   // Generate a random color for a faction if not the current player
-  const randomColorCache = {};
+  const randomColorCache = React.useRef({});
   function getRandomColor(factionName) {
-    if (randomColorCache[factionName]) return randomColorCache[factionName];
+    if (randomColorCache.current[factionName])
+      return randomColorCache.current[factionName];
     // Generate pastel random color
     const hue = Math.floor(Math.random() * 360);
     const color = `hsl(${hue}, 70%, 65%)`;
-    randomColorCache[factionName] = color;
+    randomColorCache.current[factionName] = color;
     return color;
   }
 
@@ -169,7 +225,6 @@ const TacticalMap = ({ onClose, currentFaction }) => {
                   onClick={() => selectSystem(systemName)}
                   disabled={loading}
                 >
-                  <div className="system-icon">🌌</div>
                   <div className="system-name">{systemName}</div>
                 </button>
               ))}
@@ -190,8 +245,9 @@ const TacticalMap = ({ onClose, currentFaction }) => {
             {loading ? (
               <div className="loading-system">Loading system data...</div>
             ) : (
-              <div className="worlds-grid">
+              <div className="worlds-grid" style={{ paddingBottom: "48px" }}>
                 {solarSystems[selectedSystem].map((worldName) => {
+                  // Get all fleets at this world
                   const fleetsAtWorld = Object.entries(systemData).reduce(
                     (acc, [factionName, fleets]) => {
                       const worldFleets = fleets.filter(
@@ -210,25 +266,123 @@ const TacticalMap = ({ onClose, currentFaction }) => {
                     []
                   );
 
+                  // Fog of war: only fleets with Action 'Defense', 'Patrol', or 'Attack' count for revealing
+                  const currentFactionActiveUnits = fleetsAtWorld.filter(
+                    (fleet) =>
+                      fleet.factionName.toLowerCase() ===
+                        currentFaction.toLowerCase() &&
+                      [
+                        "Defense",
+                        "Patrol",
+                        "Attack",
+                        "Idle",
+                        "Mothballed",
+                      ].includes(fleet.State?.Action)
+                  );
+                  // Always show all fleets of the current faction
+                  const currentFactionAllUnits = fleetsAtWorld.filter(
+                    (fleet) =>
+                      fleet.factionName.toLowerCase() ===
+                      currentFaction.toLowerCase()
+                  );
+                  // For other factions, only show if current faction has active units here
+                  const visibleFleets =
+                    currentFactionActiveUnits.length > 0
+                      ? fleetsAtWorld
+                      : currentFactionAllUnits;
+
+                  // Separate ground and space units
+                  const groundUnits = visibleFleets.filter(
+                    (fleet) =>
+                      fleet.Type !== "Space" ||
+                      (fleet.Vehicles &&
+                        fleet.Vehicles.some((v) => {
+                          const vehicle = allFactions[
+                            fleet.factionName
+                          ]?.Vehicles?.find((veh) => veh.ID === v.ID);
+                          return (
+                            vehicle &&
+                            vehicle.name &&
+                            (vehicle.name.toLowerCase().includes("tank") ||
+                              vehicle.name.toLowerCase().includes("infantry") ||
+                              vehicle.name.toLowerCase().includes("artillery"))
+                          );
+                        }))
+                  );
+                  const spaceUnits = visibleFleets.filter(
+                    (fleet) =>
+                      fleet.Type === "Space" &&
+                      !(
+                        fleet.Vehicles &&
+                        fleet.Vehicles.some((v) => {
+                          const vehicle = allFactions[
+                            fleet.factionName
+                          ]?.Vehicles?.find((veh) => veh.ID === v.ID);
+                          return (
+                            vehicle &&
+                            vehicle.name &&
+                            (vehicle.name.toLowerCase().includes("tank") ||
+                              vehicle.name.toLowerCase().includes("infantry") ||
+                              vehicle.name.toLowerCase().includes("artillery"))
+                          );
+                        })
+                      )
+                  );
+
                   return (
                     <div key={worldName} className="world-container">
                       <div className="world-circle">
                         <div className="world-name">{worldName}</div>
-                        <div className="world-center">🪐</div>
+                        <div className="world-center">
+                          {/* Greyscale if current faction has no units here (fog of war) */}
+                          <PlanetImageOrEmoji
+                            planetName={worldName}
+                            grayscale={currentFactionActiveUnits.length === 0}
+                          />
+                        </div>
 
-                        {/* Fleet markers around the world */}
-                        <div className="fleet-markers">
-                          {fleetsAtWorld.map((fleet, index) => {
-                            const angle = (360 / fleetsAtWorld.length) * index;
-                            const radius = 85; // match .world-circle size
+                        {/* Ground units inner ring */}
+                        <div className="fleet-markers ground-ring">
+                          {groundUnits.map((fleet, index) => {
+                            const angle = (360 / groundUnits.length) * index;
+                            const radius = 65; // inner ring
                             const x =
                               Math.cos((angle * Math.PI) / 180) * radius;
                             const y =
                               Math.sin((angle * Math.PI) / 180) * radius;
-
                             return (
                               <div
-                                key={`${fleet.factionName}-${fleet.ID}`}
+                                key={`ground-${fleet.factionName}-${fleet.ID}`}
+                                className="fleet-marker"
+                                style={{
+                                  transform: `translate(${x}px, ${y}px)`,
+                                  color: getFactionColor(fleet.factionName),
+                                  cursor: "pointer",
+                                }}
+                                onClick={() =>
+                                  openFleetModal(fleet, fleet.factionName)
+                                }
+                                title={`${fleet.factionName} - ${
+                                  fleet.Name || `Fleet ${fleet.ID}`
+                                }`}
+                              >
+                                {getFleetIcon(fleet)}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {/* Space units outer ring */}
+                        <div className="fleet-markers space-ring">
+                          {spaceUnits.map((fleet, index) => {
+                            const angle = (360 / spaceUnits.length) * index;
+                            const radius = 90; // outer ring
+                            const x =
+                              Math.cos((angle * Math.PI) / 180) * radius;
+                            const y =
+                              Math.sin((angle * Math.PI) / 180) * radius;
+                            return (
+                              <div
+                                key={`space-${fleet.factionName}-${fleet.ID}`}
                                 className="fleet-marker"
                                 style={{
                                   transform: `translate(${x}px, ${y}px)`,
@@ -251,8 +405,13 @@ const TacticalMap = ({ onClose, currentFaction }) => {
 
                       <div className="world-info">
                         <div className="world-fleets-count">
-                          {fleetsAtWorld.length} fleet
-                          {fleetsAtWorld.length !== 1 ? "s" : ""}
+                          {currentFactionAllUnits.length > 0
+                            ? `${groundUnits.length} ground unit${
+                                groundUnits.length !== 1 ? "s" : ""
+                              }, ${spaceUnits.length} space unit${
+                                spaceUnits.length !== 1 ? "s" : ""
+                              }`
+                            : "? units"}
                         </div>
                       </div>
                     </div>
@@ -299,21 +458,158 @@ const TacticalMap = ({ onClose, currentFaction }) => {
                     <h4>Fleet Composition:</h4>
                     {selectedFleet.Vehicles &&
                     selectedFleet.Vehicles.length > 0 ? (
-                      <div className="vehicles-list">
-                        {selectedFleet.Vehicles.map((vehicle, index) => {
-                          const vehicleData = allFactions[
-                            selectedFleet.factionName
-                          ]?.Vehicles?.find((v) => v.ID === vehicle.ID);
+                      (() => {
+                        const isCurrentFaction =
+                          selectedFleet.factionName.toLowerCase() ===
+                          currentFaction.toLowerCase();
+                        // Filter out stealth ships (only for enemy factions)
+                        // visibleVehicles: only non-stealth ships for composition
+                        const visibleVehicles = selectedFleet.Vehicles.filter(
+                          (vehicle) => {
+                            // If it's the current faction, show all vehicles including stealth
+                            if (isCurrentFaction) {
+                              return true;
+                            }
+                            // For enemy factions, filter out stealth ships
+                            const factionVehicles =
+                              allFactions[selectedFleet.factionName]
+                                ?.Vehicles || [];
+                            const vehicleRecord = factionVehicles.find(
+                              (v) => v.ID === vehicle.ID
+                            );
+                            // Debug log to see what's happening
+                            console.log("Vehicle check:", {
+                              vehicleID: vehicle.ID,
+                              vehicleRecord,
+                              stealth: vehicleRecord?.stealth,
+                              dataStealth: vehicleRecord?.data?.stealth,
+                              isCurrentFaction,
+                              shouldShow:
+                                isCurrentFaction ||
+                                !(
+                                  vehicleRecord?.stealth === true ||
+                                  vehicleRecord?.data?.stealth === true
+                                ),
+                            });
+                            return !(
+                              vehicleRecord?.stealth === true ||
+                              vehicleRecord?.data?.stealth === true
+                            );
+                          }
+                        );
+                        // totalShips: all ships, including stealth
+                        const totalShips = selectedFleet.Vehicles.reduce(
+                          (sum, v) => sum + (v.count || 0),
+                          0
+                        );
+                        // If not current faction and fleet is Idle or Mothballed, show only total ships
+                        if (
+                          !isCurrentFaction &&
+                          ["Idle", "Mothballed"].includes(
+                            selectedFleet.State?.Action
+                          )
+                        ) {
                           return (
-                            <div key={index} className="vehicle-item">
-                              <span className="vehicle-name">
-                                {vehicleData?.name || `Vehicle ${vehicle.ID}`}
-                              </span>
-                              <span className="">{vehicle.count || 0}</span>
+                            <div
+                              style={{
+                                fontWeight: "bold",
+                                marginBottom: "8px",
+                              }}
+                            >
+                              Total Ships: {totalShips}
+                              <div
+                                style={{
+                                  fontStyle: "italic",
+                                  marginTop: "4px",
+                                }}
+                              >
+                                Intelligence insufficient.
+                              </div>
                             </div>
                           );
-                        })}
-                      </div>
+                        }
+                        // If not current faction and all fleets at world are Idle/Mothballed, hide composition
+                        if (!isCurrentFaction) {
+                          const fleetsAtWorld = Object.entries(
+                            systemData
+                          ).reduce((acc, [factionName, fleets]) => {
+                            if (factionName === selectedFleet.factionName) {
+                              acc.push(
+                                ...fleets.filter(
+                                  (fleet) =>
+                                    fleet.State?.Location ===
+                                    selectedFleet.State?.Location
+                                )
+                              );
+                            }
+                            return acc;
+                          }, []);
+                          if (
+                            fleetsAtWorld.length > 0 &&
+                            fleetsAtWorld.every((fleet) =>
+                              ["Idle", "Mothballed"].includes(
+                                fleet.State?.Action
+                              )
+                            )
+                          ) {
+                            return (
+                              <>
+                                <div
+                                  style={{
+                                    fontWeight: "bold",
+                                    marginBottom: "8px",
+                                  }}
+                                >
+                                  Total Ships: {totalShips}
+                                </div>
+                                <div
+                                  style={{
+                                    fontStyle: "italic",
+                                    marginTop: "4px",
+                                  }}
+                                >
+                                  Ship composition is hidden.
+                                </div>
+                              </>
+                            );
+                          }
+                        }
+                        // Otherwise, show full composition
+                        return (
+                          <>
+                            <div
+                              style={{
+                                fontWeight: "bold",
+                                marginBottom: "8px",
+                              }}
+                            >
+                              Total Ships: {totalShips}
+                            </div>
+                            {visibleVehicles.length > 0 ? (
+                              <div className="vehicles-list">
+                                {visibleVehicles.map((vehicle, index) => {
+                                  const vehicleData = allFactions[
+                                    selectedFleet.factionName
+                                  ]?.Vehicles?.find((v) => v.ID === vehicle.ID);
+                                  return (
+                                    <div key={index} className="vehicle-item">
+                                      <span className="vehicle-name">
+                                        {vehicleData?.name ||
+                                          `Vehicle ${vehicle.ID}`}
+                                      </span>
+                                      <span className="">
+                                        {vehicle.count || 0}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <p>No visible ships in this fleet</p>
+                            )}
+                          </>
+                        );
+                      })()
                     ) : (
                       <p>No vehicles in this fleet</p>
                     )}
