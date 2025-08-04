@@ -254,8 +254,12 @@ const ArmedForces = ({ onBack, nationName = "athena", dbLoaded }) => {
       vehicleName,
       allVehicles
     );
-    setSelectedVehicle(vehicleDetails);
-    setShowVehicleModal(true);
+    if (vehicleDetails) {
+      setSelectedVehicle(vehicleDetails);
+      setShowVehicleModal(true);
+    } else {
+      alert(`No details found for vehicle: ${vehicleName}`);
+    }
   };
 
   const closeVehicleModal = () => {
@@ -590,7 +594,38 @@ const ArmedForces = ({ onBack, nationName = "athena", dbLoaded }) => {
                       </div>
                       <div className="unit-details">
                         <span>
-                          {unit.vehicleLabel}: {unit.ships}
+                          {unit.vehicleLabel}:{" "}
+                          {(() => {
+                            // If fleet is in Attack mode, reveal stealth ships
+                            if (
+                              unit.state === "Attack" &&
+                              unit.vehicles &&
+                              allVehicles.length > 0
+                            ) {
+                              // Count all vehicles, including stealth
+                              return unit.vehicles.reduce(
+                                (sum, v) => sum + v.count,
+                                0
+                              );
+                            } else if (
+                              unit.vehicles &&
+                              allVehicles.length > 0
+                            ) {
+                              // Hide stealth ships unless in Attack mode
+                              return unit.vehicles.reduce((sum, v) => {
+                                const vehicleData = allVehicles.find(
+                                  (av) => av.ID === v.ID
+                                );
+                                const isStealth =
+                                  vehicleData?.stealth ||
+                                  vehicleData?.data?.stealth;
+                                return isStealth ? sum : sum + v.count;
+                              }, 0);
+                            } else {
+                              // Fallback
+                              return unit.ships;
+                            }
+                          })()}
                         </span>
                       </div>
                       <p className="unit-location">{unit.location}</p>
@@ -1274,52 +1309,76 @@ const ArmedForces = ({ onBack, nationName = "athena", dbLoaded }) => {
           <div className="modal-overlay" onClick={closeVehicleModal}>
             <div className="unit-modal" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header">
-                <h2>{selectedVehicle.name}</h2>
+                <h2>{selectedVehicle.name || "Vehicle Details"}</h2>
                 <button className="close-btn" onClick={closeVehicleModal}>
                   ✕
                 </button>
               </div>
               <div className="modal-content">
-                <div className="vehicle-info-grid">
-                  <div className="info-section">
-                    <h4>Cost Information</h4>
-                    {selectedVehicle.cost && (
-                      <div>
-                        {Object.entries(selectedVehicle.cost).map(
-                          ([key, val]) => (
-                            <p key={key}>
-                              <strong>{key}:</strong>{" "}
-                              {typeof val === "number"
-                                ? val
-                                    .toString()
-                                    .replace(/\B(?=(\d{3})+(?!\d))/g, " ")
-                                : val}
-                            </p>
-                          )
-                        )}
-                      </div>
-                    )}
+                {Object.keys(selectedVehicle).length === 0 ? (
+                  <div
+                    style={{
+                      padding: "24px",
+                      textAlign: "center",
+                      color: "#f44336",
+                    }}
+                  >
+                    No details available for this vehicle.
                   </div>
-                  <div className="info-section">
-                    <h4>Technical Data</h4>
-                    {selectedVehicle.data && (
-                      <div>
-                        {Object.entries(selectedVehicle.data).map(
-                          ([key, val]) => (
-                            <p key={key}>
-                              <strong>{key}:</strong>{" "}
-                              {typeof val === "number"
-                                ? val
-                                    .toString()
-                                    .replace(/\B(?=(\d{3})+(?!\d))/g, " ")
-                                : val}
-                            </p>
-                          )
-                        )}
-                      </div>
-                    )}
+                ) : (
+                  <div className="vehicle-info-grid">
+                    <div className="info-section">
+                      <h4>Cost Information</h4>
+                      {selectedVehicle.cost && (
+                        <div>
+                          {Object.entries(selectedVehicle.cost).map(
+                            ([key, val]) => (
+                              <p key={key}>
+                                <strong>{key}:</strong>{" "}
+                                {typeof val === "number"
+                                  ? val
+                                      .toString()
+                                      .replace(/\B(?=(\d{3})+(?!\d))/g, " ")
+                                  : typeof val === "string"
+                                  ? val
+                                  : Array.isArray(val)
+                                  ? val.join(", ")
+                                  : typeof val === "object" && val !== null
+                                  ? JSON.stringify(val)
+                                  : String(val)}
+                              </p>
+                            )
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <div className="info-section">
+                      <h4>Technical Data</h4>
+                      {selectedVehicle.data && (
+                        <div>
+                          {Object.entries(selectedVehicle.data).map(
+                            ([key, val]) => (
+                              <p key={key}>
+                                <strong>{key}:</strong>{" "}
+                                {typeof val === "number"
+                                  ? val
+                                      .toString()
+                                      .replace(/\B(?=(\d{3})+(?!\d))/g, " ")
+                                  : typeof val === "string"
+                                  ? val
+                                  : Array.isArray(val)
+                                  ? val.join(", ")
+                                  : typeof val === "object" && val !== null
+                                  ? JSON.stringify(val)
+                                  : String(val)}
+                              </p>
+                            )
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             </div>
           </div>

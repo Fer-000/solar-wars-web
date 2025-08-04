@@ -266,30 +266,29 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
                     []
                   );
 
-                  // Fog of war: only fleets with Action 'Defense', 'Patrol', or 'Attack' count for revealing
-                  const currentFactionActiveUnits = fleetsAtWorld.filter(
+                  // Determine if current faction has at least one active unit (Defense, Patrol, Attack)
+                  const currentFactionActiveCombatUnits = fleetsAtWorld.filter(
                     (fleet) =>
                       fleet.factionName.toLowerCase() ===
                         currentFaction.toLowerCase() &&
-                      [
-                        "Defense",
-                        "Patrol",
-                        "Attack",
-                        "Idle",
-                        "Mothballed",
-                      ].includes(fleet.State?.Action)
+                      ["Defense", "Patrol", "Attack"].includes(
+                        fleet.State?.Action
+                      )
                   );
-                  // Always show all fleets of the current faction
-                  const currentFactionAllUnits = fleetsAtWorld.filter(
+
+                  // Only show fleet pointers if current faction has a fleet at this world
+                  const currentFactionHasFleetHere = fleetsAtWorld.some(
                     (fleet) =>
                       fleet.factionName.toLowerCase() ===
                       currentFaction.toLowerCase()
                   );
-                  // For other factions, only show if current faction has active units here
-                  const visibleFleets =
-                    currentFactionActiveUnits.length > 0
-                      ? fleetsAtWorld
-                      : currentFactionAllUnits;
+                  const visibleFleets = currentFactionHasFleetHere
+                    ? fleetsAtWorld
+                    : fleetsAtWorld.filter(
+                        (fleet) =>
+                          fleet.factionName.toLowerCase() ===
+                          currentFaction.toLowerCase()
+                      );
 
                   // Separate ground and space units
                   const groundUnits = visibleFleets.filter(
@@ -309,12 +308,12 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
                           );
                         }))
                   );
+
                   const spaceUnits = visibleFleets.filter(
                     (fleet) =>
                       fleet.Type === "Space" &&
-                      !(
-                        fleet.Vehicles &&
-                        fleet.Vehicles.some((v) => {
+                      (!fleet.Vehicles ||
+                        !fleet.Vehicles.some((v) => {
                           const vehicle = allFactions[
                             fleet.factionName
                           ]?.Vehicles?.find((veh) => veh.ID === v.ID);
@@ -325,8 +324,7 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
                               vehicle.name.toLowerCase().includes("infantry") ||
                               vehicle.name.toLowerCase().includes("artillery"))
                           );
-                        })
-                      )
+                        }))
                   );
 
                   return (
@@ -337,7 +335,9 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
                           {/* Greyscale if current faction has no units here (fog of war) */}
                           <PlanetImageOrEmoji
                             planetName={worldName}
-                            grayscale={currentFactionActiveUnits.length === 0}
+                            grayscale={
+                              currentFactionActiveCombatUnits.length === 0
+                            }
                           />
                         </div>
 
@@ -405,7 +405,11 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
 
                       <div className="world-info">
                         <div className="world-fleets-count">
-                          {currentFactionAllUnits.length > 0
+                          {fleetsAtWorld.some(
+                            (fleet) =>
+                              fleet.factionName.toLowerCase() ===
+                              currentFaction.toLowerCase()
+                          )
                             ? `${groundUnits.length} ground unit${
                                 groundUnits.length !== 1 ? "s" : ""
                               }, ${spaceUnits.length} space unit${
@@ -424,6 +428,7 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
 
         {/* Fleet Detail Modal */}
         {showFleetModal && selectedFleet && (
+          // ...existing code...
           <div className="fleet-modal-overlay" onClick={closeFleetModal}>
             <div className="fleet-modal" onClick={(e) => e.stopPropagation()}>
               <div className="fleet-modal-header">
@@ -437,7 +442,6 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
                   ✕
                 </button>
               </div>
-
               <div className="fleet-modal-content">
                 <div className="fleet-details">
                   <div className="fleet-basic-info">
@@ -453,161 +457,122 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
                       <strong>Type:</strong> {selectedFleet.Type || "Unknown"}
                     </p>
                   </div>
-
                   <div className="fleet-vehicles">
                     <h4>Fleet Composition:</h4>
-                    {selectedFleet.Vehicles &&
+                    {Array.isArray(selectedFleet.Vehicles) &&
                     selectedFleet.Vehicles.length > 0 ? (
                       (() => {
                         const isCurrentFaction =
                           selectedFleet.factionName.toLowerCase() ===
                           currentFaction.toLowerCase();
-                        // Filter out stealth ships (only for enemy factions)
-                        // visibleVehicles: only non-stealth ships for composition
-                        const visibleVehicles = selectedFleet.Vehicles.filter(
-                          (vehicle) => {
-                            // If it's the current faction, show all vehicles including stealth
-                            if (isCurrentFaction) {
-                              return true;
-                            }
-                            // For enemy factions, filter out stealth ships
-                            const factionVehicles =
-                              allFactions[selectedFleet.factionName]
-                                ?.Vehicles || [];
-                            const vehicleRecord = factionVehicles.find(
-                              (v) => v.ID === vehicle.ID
-                            );
-                            // Debug log to see what's happening
-                            console.log("Vehicle check:", {
-                              vehicleID: vehicle.ID,
-                              vehicleRecord,
-                              stealth: vehicleRecord?.stealth,
-                              dataStealth: vehicleRecord?.data?.stealth,
-                              isCurrentFaction,
-                              shouldShow:
-                                isCurrentFaction ||
-                                !(
-                                  vehicleRecord?.stealth === true ||
-                                  vehicleRecord?.data?.stealth === true
-                                ),
-                            });
-                            return !(
-                              vehicleRecord?.stealth === true ||
-                              vehicleRecord?.data?.stealth === true
-                            );
-                          }
-                        );
-                        // totalShips: all ships, including stealth
                         const totalShips = selectedFleet.Vehicles.reduce(
                           (sum, v) => sum + (v.count || 0),
                           0
                         );
-                        // If not current faction and fleet is Idle or Mothballed, show only total ships
-                        if (
-                          !isCurrentFaction &&
-                          ["Idle", "Mothballed"].includes(
-                            selectedFleet.State?.Action
-                          )
-                        ) {
-                          return (
-                            <div
-                              style={{
-                                fontWeight: "bold",
-                                marginBottom: "8px",
-                              }}
-                            >
-                              Total Ships: {totalShips}
-                              <div
-                                style={{
-                                  fontStyle: "italic",
-                                  marginTop: "4px",
-                                }}
-                              >
-                                Intelligence insufficient.
-                              </div>
-                            </div>
-                          );
-                        }
-                        // If not current faction and all fleets at world are Idle/Mothballed, hide composition
-                        if (!isCurrentFaction) {
-                          const fleetsAtWorld = Object.entries(
-                            systemData
-                          ).reduce((acc, [factionName, fleets]) => {
-                            if (factionName === selectedFleet.factionName) {
+                        // Find the fleets at the selected fleet's world
+                        const fleetsAtWorld = Object.entries(systemData).reduce(
+                          (acc, [factionName, fleets]) => {
+                            const worldFleets = fleets.filter(
+                              (fleet) =>
+                                fleet.State?.Location ===
+                                selectedFleet.State?.Location
+                            );
+                            if (worldFleets.length > 0) {
                               acc.push(
-                                ...fleets.filter(
-                                  (fleet) =>
-                                    fleet.State?.Location ===
-                                    selectedFleet.State?.Location
-                                )
+                                ...worldFleets.map((fleet) => ({
+                                  ...fleet,
+                                  factionName,
+                                }))
                               );
                             }
                             return acc;
-                          }, []);
-                          if (
-                            fleetsAtWorld.length > 0 &&
-                            fleetsAtWorld.every((fleet) =>
-                              ["Idle", "Mothballed"].includes(
+                          },
+                          []
+                        );
+                        // Determine if current faction has at least one active unit (Defense, Patrol, Attack) at this world
+                        const currentFactionActiveCombatUnits =
+                          fleetsAtWorld.filter(
+                            (fleet) =>
+                              fleet.factionName.toLowerCase() ===
+                                currentFaction.toLowerCase() &&
+                              ["Defense", "Patrol", "Attack"].includes(
                                 fleet.State?.Action
                               )
-                            )
-                          ) {
-                            return (
-                              <>
-                                <div
-                                  style={{
-                                    fontWeight: "bold",
-                                    marginBottom: "8px",
-                                  }}
-                                >
-                                  Total Ships: {totalShips}
-                                </div>
-                                <div
-                                  style={{
-                                    fontStyle: "italic",
-                                    marginTop: "4px",
-                                  }}
-                                >
-                                  Ship composition is hidden.
-                                </div>
-                              </>
-                            );
-                          }
-                        }
-                        // Otherwise, show full composition
-                        return (
-                          <>
-                            <div
-                              style={{
-                                fontWeight: "bold",
-                                marginBottom: "8px",
-                              }}
-                            >
-                              Total Ships: {totalShips}
-                            </div>
-                            {visibleVehicles.length > 0 ? (
-                              <div className="vehicles-list">
-                                {visibleVehicles.map((vehicle, index) => {
-                                  const vehicleData = allFactions[
-                                    selectedFleet.factionName
-                                  ]?.Vehicles?.find((v) => v.ID === vehicle.ID);
-                                  return (
-                                    <div key={index} className="vehicle-item">
-                                      <span className="vehicle-name">
-                                        {vehicleData?.name ||
-                                          `Vehicle ${vehicle.ID}`}
-                                      </span>
-                                      <span className="">
-                                        {vehicle.count || 0}
-                                      </span>
-                                    </div>
-                                  );
-                                })}
+                          );
+                        const hasActiveUnit =
+                          currentFactionActiveCombatUnits.length > 0;
+                        if (isCurrentFaction || hasActiveUnit) {
+                          // For enemy fleets, show composition but hide stealth ships unless fleet is attacking
+                          const visibleVehicles = selectedFleet.Vehicles.filter(
+                            (vehicle) => {
+                              if (isCurrentFaction) return true;
+                              const factionVehicles =
+                                allFactions[selectedFleet.factionName]
+                                  ?.Vehicles || [];
+                              const vehicleRecord = factionVehicles.find(
+                                (v) => v.ID === vehicle.ID
+                              );
+                              const isStealth =
+                                vehicleRecord?.stealth === true ||
+                                vehicleRecord?.data?.stealth === true;
+                              if (
+                                isStealth &&
+                                selectedFleet.State?.Action !== "Attack"
+                              ) {
+                                return false;
+                              }
+                              return true;
+                            }
+                          );
+                          return (
+                            <>
+                              <div
+                                style={{
+                                  fontWeight: "bold",
+                                  marginBottom: "8px",
+                                }}
+                              >
+                                Total Ships: {totalShips}
                               </div>
-                            ) : (
-                              <p>No visible ships in this fleet</p>
-                            )}
-                          </>
+                              {visibleVehicles.length > 0 ? (
+                                <div className="vehicles-list">
+                                  {visibleVehicles.map((vehicle, index) => {
+                                    const vehicleData = allFactions[
+                                      selectedFleet.factionName
+                                    ]?.Vehicles?.find(
+                                      (v) => v.ID === vehicle.ID
+                                    );
+                                    return (
+                                      <div key={index} className="vehicle-item">
+                                        <span className="vehicle-name">
+                                          {vehicleData?.name ||
+                                            `Vehicle ${vehicle.ID}`}
+                                        </span>
+                                        <span className="">
+                                          {vehicle.count || 0}
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <p>No visible ships in this fleet</p>
+                              )}
+                            </>
+                          );
+                        }
+                        // Otherwise, show only total and intelligence insufficient
+                        return (
+                          <div
+                            style={{ fontWeight: "bold", marginBottom: "8px" }}
+                          >
+                            Total Ships: {totalShips}
+                            <div
+                              style={{ fontStyle: "italic", marginTop: "4px" }}
+                            >
+                              Intelligence insufficient.
+                            </div>
+                          </div>
                         );
                       })()
                     ) : (
