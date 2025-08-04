@@ -1,0 +1,160 @@
+.settings {
+  position: relative;
+  min-height: 100vh;
+  padding: 2rem;
+  overflow-x: hidden;
+}
+
+.settings-content {
+  position: relative;
+  z-index: 10;
+  max-width: 800px;
+  margin: 0 auto;
+  padding-top: 4rem;
+  padding-bottom: 2rem;
+  min-height: 100vh;
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  margin-bottom: 3rem;
+}
+
+.back-button {
+  padding: 0.75rem 1.5rem;
+  background: rgba(100, 108, 255, 0.1);
+  border: 1px solid rgba(100, 108, 255, 0.3);
+  border-radius: 8px;
+  color: #ffffff;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.back-button:hover {
+  background: rgba(100, 108, 255, 0.2);
+  border-color: #646cff;
+}
+
+.settings-header h1 {
+  font-size: 2.5rem;
+  background: linear-gradient(45deg, #646cff, #61dafb);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 2rem;
+}
+
+.setting-card {
+  background: rgba(20, 20, 30, 0.9);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(100, 108, 255, 0.2);
+  border-radius: 16px;
+  padding: 2rem;
+}
+
+.setting-card h3 {
+  font-size: 1.5rem;
+  margin-bottom: 1.5rem;
+  color: #ffffff;
+  border-bottom: 1px solid rgba(100, 108, 255, 0.2);
+  padding-bottom: 0.5rem;
+}
+
+.setting-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding: 0.5rem 0;
+}
+
+.setting-option label {
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 500;
+}
+
+.setting-option input[type="text"],
+.setting-option input[type="color"],
+.setting-option select,
+.setting-option input[type="checkbox"] {
+  background: rgba(40, 40, 50, 0.8);
+  border: 1px solid rgba(100, 108, 255, 0.3);
+  border-radius: 4px;
+  color: #ffffff;
+  padding: 0.5rem;
+}
+
+.setting-option input[type="text"] {
+  min-width: 150px;
+}
+
+.setting-option input[type="color"] {
+  width: 60px;
+  height: 40px;
+  padding: 0.2rem;
+}
+
+.setting-option select {
+  min-width: 120px;
+}
+
+.setting-option input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  accent-color: #646cff;
+}
+
+.settings-actions {
+  margin-top: 2rem;
+  text-align: center;
+}
+
+.save-button {
+  padding: 1rem 2rem;
+  background: linear-gradient(45deg, #646cff, #61dafb);
+  border: none;
+  border-radius: 8px;
+  color: #ffffff;
+  font-size: 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.save-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(100, 108, 255, 0.4);
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .settings {
+    padding: 1rem;
+  }
+  
+  .settings-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+  
+  .settings-header h1 {
+    font-size: 2rem;
+  }
+  
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .setting-card {
+    padding: 1.5rem;
+  }
+}

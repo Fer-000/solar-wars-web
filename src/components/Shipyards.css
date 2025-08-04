@@ -1,0 +1,292 @@
+/* Shipyards specific styles */
+.shipyards-page {
+  position: relative;
+  overflow: hidden;
+}
+
+.blueprint-background {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -5;
+  background: linear-gradient(135deg, #0f1419 0%, #1a2332 100%);
+  opacity: 0.8;
+}
+
+.blueprint-grid {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: 
+    linear-gradient(rgba(100, 108, 255, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(100, 108, 255, 0.1) 1px, transparent 1px);
+  background-size: 50px 50px;
+  animation: blueprintPulse 4s ease-in-out infinite alternate;
+}
+
+.blueprint-lines {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: 
+    linear-gradient(45deg, transparent 49%, rgba(100, 108, 255, 0.05) 50%, transparent 51%),
+    linear-gradient(-45deg, transparent 49%, rgba(100, 108, 255, 0.05) 50%, transparent 51%);
+  background-size: 100px 100px;
+}
+
+/* Different blueprint patterns for each category */
+.blueprint-background[data-category="ship"] .blueprint-grid {
+  background-size: 60px 60px;
+  background-image: 
+    linear-gradient(rgba(100, 108, 255, 0.15) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(100, 108, 255, 0.15) 1px, transparent 1px);
+}
+
+.blueprint-background[data-category="aircraft"] .blueprint-grid {
+  background-size: 40px 40px;
+  background-image: 
+    linear-gradient(rgba(97, 218, 251, 0.15) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(97, 218, 251, 0.15) 1px, transparent 1px);
+}
+
+.blueprint-background[data-category="ground"] .blueprint-grid {
+  background-size: 80px 80px;
+  background-image: 
+    linear-gradient(rgba(255, 107, 107, 0.15) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 107, 107, 0.15) 1px, transparent 1px);
+}
+
+.blueprint-background[data-category="missile"] .blueprint-grid {
+  background-size: 30px 30px;
+  background-image: 
+    linear-gradient(rgba(255, 217, 61, 0.15) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 217, 61, 0.15) 1px, transparent 1px);
+}
+
+.blueprint-background[data-category="soldier"] .blueprint-grid {
+  background-size: 25px 25px;
+  background-image: 
+    linear-gradient(rgba(116, 185, 255, 0.15) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(116, 185, 255, 0.15) 1px, transparent 1px);
+}
+
+.blueprint-background[data-category="platform"] .blueprint-grid {
+  background-size: 100px 100px;
+  background-image: 
+    linear-gradient(rgba(162, 155, 254, 0.15) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(162, 155, 254, 0.15) 1px, transparent 1px);
+}
+
+@keyframes blueprintPulse {
+  from {
+    opacity: 0.8;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Carousel at bottom */
+.category-carousel {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  height: 120px;
+  background: linear-gradient(to top, rgba(10, 10, 10, 0.95) 0%, rgba(10, 10, 10, 0.8) 70%, transparent 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem 2rem;
+  padding-top: 2rem; /* Extra padding to prevent cutting */
+  
+  /* Trapezoid shape - fixed to not cut top */
+  clip-path: polygon(15% 20%, 85% 20%, 100% 100%, 0% 100%);
+  backdrop-filter: blur(10px);
+}
+
+.carousel-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  flex: 1;
+  max-width: 600px;
+  position: relative;
+  overflow: hidden;
+}
+
+.category-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1rem;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: rgba(20, 20, 30, 0.6);
+  border: 1px solid rgba(100, 108, 255, 0.2);
+  min-width: 100px;
+  position: relative;
+}
+
+.category-item.hidden {
+  opacity: 0;
+  transform: scale(0.8);
+  pointer-events: none;
+  position: absolute;
+}
+
+.category-item.visible {
+  opacity: 0.7;
+  transform: scale(0.9);
+}
+
+.category-item.active {
+  opacity: 1;
+  transform: scale(1.1);
+  background: rgba(100, 108, 255, 0.2);
+  border-color: #646cff;
+  box-shadow: 0 0 20px rgba(100, 108, 255, 0.3);
+}
+
+.category-item:hover:not(.active) {
+  opacity: 0.9;
+  transform: scale(0.95);
+  background: rgba(100, 108, 255, 0.1);
+}
+
+.category-icon {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+  filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.3));
+}
+
+.category-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #ffffff;
+  text-align: center;
+}
+
+.carousel-arrow {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: rgba(100, 108, 255, 0.2);
+  border: 1px solid rgba(100, 108, 255, 0.3);
+  color: #ffffff;
+  font-size: 1.5rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(10px);
+}
+
+.carousel-arrow:hover {
+  background: rgba(100, 108, 255, 0.4);
+  border-color: #646cff;
+  transform: scale(1.1);
+}
+
+.carousel-arrow.left {
+  margin-right: 1rem;
+}
+
+.carousel-arrow.right {
+  margin-left: 1rem;
+}
+
+/* Adjust center content to account for carousel */
+.shipyards-page .center-content {
+  padding-bottom: 140px;
+  overflow: visible;
+}
+
+/* Make the center grid more flexible for calculators */
+.shipyards-page .center-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.no-vehicles {
+  text-align: center;
+  padding: 2rem;
+  color: rgba(255, 255, 255, 0.6);
+  font-style: italic;
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .category-carousel {
+    height: 100px;
+    padding: 0.5rem 1rem;
+    padding-top: 1.5rem;
+    clip-path: polygon(10% 20%, 90% 20%, 100% 100%, 0% 100%);
+  }
+  
+  /* Hide arrows on mobile */
+  .carousel-arrow {
+    display: none;
+  }
+  
+  .carousel-container {
+    gap: 0.5rem;
+    max-width: 400px;
+  }
+  
+  .category-item {
+    min-width: 80px;
+    padding: 0.75rem;
+  }
+  
+  .category-icon {
+    font-size: 1.5rem;
+  }
+  
+  .category-name {
+    font-size: 0.8rem;
+  }
+}
+  
+  .shipyards-page .center-content {
+    padding-bottom: 120px;
+  }
+
+
+@media (max-width: 480px) {
+  .category-carousel {
+    height: 90px;
+    clip-path: polygon(5% 0%, 95% 0%, 100% 100%, 0% 100%);
+  }
+  
+  .category-item {
+    min-width: 70px;
+    padding: 0.5rem;
+  }
+  
+  .category-icon {
+    font-size: 1.2rem;
+    margin-bottom: 0.25rem;
+  }
+  
+  .category-name {
+    font-size: 0.7rem;
+  }
+  
+  .carousel-arrow {
+    width: 35px;
+    height: 35px;
+    font-size: 1rem;
+  }
+}
