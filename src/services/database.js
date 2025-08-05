@@ -140,17 +140,23 @@ class DatabaseService {
   // Update faction data (matches bot's setFaction function)
   async setFaction(server = "The Solar Wars", factionId, newData) {
     try {
+      console.log(`Updating faction ${factionId} in server ${server} with data:`, newData);
       const docRef = doc(db, server, factionId.toLowerCase());
       await updateDoc(docRef, newData);
+      console.log('Successfully updated Firestore document');
+      
       // Update globalDB cache
       const globalDB = (await import("./GlobalDB")).default;
       globalDB.updateFaction(server, factionId, newData);
+      console.log('Updated globalDB cache');
+      
       // Update local cache
       if (this.cache[server] && this.cache[server][factionId.toLowerCase()]) {
         this.cache[server][factionId.toLowerCase()] = {
           ...this.cache[server][factionId.toLowerCase()],
           ...newData
         };
+        console.log('Updated local cache');
       }
       return true;
     } catch (error) {
@@ -426,8 +432,44 @@ class DatabaseService {
       default: return 'Idle';
     }
   }
+
+  // Calculate faction income (similar to bot's /income command)
+  async calculateFactionIncome(server = "The Solar Wars", factionId) {
+    try {
+      const factionData = await this.getFaction(server, factionId);
+      if (!factionData) return null;
+
+      // This is a simplified income calculation
+      // For full bot compatibility, you'd need to implement the complete incomeMath.js logic
+      const income = factionData.Income || {};
+      return income;
+    } catch (error) {
+      console.error('Error calculating faction income:', error);
+      return null;
+    }
+  }
+
+  // Update faction resources
+  async updateFactionResources(server = "The Solar Wars", factionId, newResources) {
+    try {
+      const currentData = await this.getFaction(server, factionId);
+      if (!currentData) {
+        throw new Error('Faction not found');
+      }
+
+      await this.setFaction(server, factionId, {
+        ...currentData,
+        Resources: newResources
+      });
+
+      return true;
+    } catch (error) {
+      console.error('Error updating faction resources:', error);
+      return false;
+    }
+  }
 }
 
-// Create singleton instance
+  // Create singleton instance
 const databaseService = new DatabaseService();
 export default databaseService;

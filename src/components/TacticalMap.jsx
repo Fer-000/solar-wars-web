@@ -21,6 +21,7 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
   const [selectedFleet, setSelectedFleet] = useState(null);
   const [showFleetModal, setShowFleetModal] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [zoomedWorld, setZoomedWorld] = useState(null); // { name, animate }
 
   const solarSystems = {
     Sol: [
@@ -51,6 +52,8 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
       "Oberon",
       "Neptune",
       "Triton",
+      "Proteus",
+      "Nereid",
       "Pluto",
       "Charon",
     ],
@@ -198,9 +201,18 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
   };
 
   const getFactionColor = (factionName) => {
+    // First check if faction has a color in the database
+    const faction = allFactions[factionName];
+    if (faction && faction.color) {
+      return faction.color;
+    }
+
+    // Fallback to predefined colors for current faction
     if (factionName.toLowerCase() === currentFaction.toLowerCase()) {
       return factionColors[factionName.toLowerCase()] || "#00f5ff";
     }
+
+    // Fallback to random color for other factions
     return getRandomColor(factionName);
   };
 
@@ -208,13 +220,226 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
     <div className="tactical-map-overlay">
       <div className="tactical-map-container">
         <div className="tactical-map-header">
-          <h2>🗺️ Tactical Map - Solar Systems</h2>
+          <h2>🗺️ Tactical Map</h2>
           <button className="close-btn" onClick={onClose}>
             ✕
           </button>
         </div>
 
-        {!selectedSystem ? (
+        {/* Zoomed-in planet view */}
+        {zoomedWorld ? (
+          <div
+            className="zoomed-planet-area"
+            style={{
+              display: "flex",
+              flexDirection: "row",
+              minHeight: "400px",
+              overflow: "hidden",
+              position: "relative",
+            }}
+          >
+            {/* Left: Buildings info, scroll bar on left, button at top */}
+            <div
+              style={{
+                flex: 1,
+                padding: "32px 16px 32px 32px",
+                zIndex: 2,
+                position: "relative",
+              }}
+            >
+              <button onClick={() => setZoomedWorld(null)}>
+                ← Back to Map
+              </button>
+              <h3 style={{ marginBottom: "16px", marginTop: "48px" }}>
+                {zoomedWorld.name} - Buildings
+              </h3>
+              <div
+                style={{
+                  maxHeight: "550px",
+                  overflowY: "auto",
+                  paddingLeft: "8px",
+                  direction: "rtl",
+                }}
+              >
+                <div style={{ direction: "ltr" }}>
+                  {(() => {
+                    const factionsWithBuildings = Object.entries(
+                      allFactions
+                    ).filter(([factionName, factionData]) => {
+                      const buildingsArr =
+                        factionData?.Maps?.[zoomedWorld.name]?.Buildings;
+                      // Only include if there is at least one building with nonzero amount
+                      return (
+                        Array.isArray(buildingsArr) &&
+                        buildingsArr.some(
+                          (levels) =>
+                            levels &&
+                            Object.entries(levels).some(
+                              ([key, amount]) => amount > 0
+                            )
+                        )
+                      );
+                    });
+
+                    if (factionsWithBuildings.length === 0) {
+                      return (
+                        <div style={{ color: "#888", fontStyle: "italic" }}>
+                          No building information available for this world.
+                          <br />
+                          <small>
+                            Debug: Looking for buildings in {zoomedWorld.name}
+                          </small>
+                        </div>
+                      );
+                    }
+
+                    return factionsWithBuildings.map(
+                      ([factionName, factionData]) => {
+                        const planetBuildings =
+                          factionData.Maps[zoomedWorld.name].Buildings;
+                        const buildingDefs = Array.isArray(
+                          factionData.Buildings
+                        )
+                          ? factionData.Buildings
+                          : [];
+                        // Only show if there is at least one building with nonzero amount
+                        const hasBuildings =
+                          Array.isArray(planetBuildings) &&
+                          planetBuildings.some(
+                            (levels) =>
+                              levels &&
+                              Object.entries(levels).some(
+                                ([key, amount]) => amount > 0
+                              )
+                          );
+                        if (!hasBuildings) return null;
+                        const displayName = factionData.name || factionName;
+                        return (
+                          <details
+                            key={factionName}
+                            style={{ marginBottom: "12px" }}
+                            open={false}
+                          >
+                            <summary
+                              style={{
+                                color: getFactionColor(factionName),
+                                fontWeight: "bold",
+                                fontSize: "16px",
+                                cursor: "pointer",
+                              }}
+                            >
+                              {displayName}
+                            </summary>
+                            <ul
+                              style={{ marginLeft: "16px", marginTop: "8px" }}
+                            >
+                              {planetBuildings.map(
+                                (buildingLevels, buildingId) => {
+                                  if (!buildingLevels) return null;
+                                  const def = buildingDefs[buildingId];
+                                  if (!def) return null;
+                                  const name =
+                                    def.name ||
+                                    def.Name ||
+                                    `Building ${buildingId}`;
+                                  const type = def.type || def.Type || "";
+                                  // buildingLevels: { [level]: amount }, key 0 = level 1, key 9 = level 10
+                                  return Object.entries(buildingLevels)
+                                    .filter(([key, amount]) => {
+                                      // Hide key 0 if amount is 0
+                                      if (key === "0" && amount === 0)
+                                        return false;
+                                      return amount > 0;
+                                    })
+                                    .map(([key, amount]) => {
+                                      let displayLevel = parseInt(key) + 1;
+                                      return (
+                                        <li
+                                          key={name + key}
+                                          style={{ marginBottom: "4px" }}
+                                        >
+                                          <span style={{ fontWeight: "bold" }}>
+                                            {name}
+                                          </span>
+                                          {type && (
+                                            <span
+                                              style={{
+                                                marginLeft: "8px",
+                                                color: "#888",
+                                              }}
+                                            >
+                                              ({type})
+                                            </span>
+                                          )}
+                                          <span
+                                            style={{
+                                              marginLeft: "8px",
+                                              color: "#00f5ff",
+                                            }}
+                                          >
+                                            Lvl {displayLevel}
+                                          </span>
+                                          <span
+                                            style={{
+                                              marginLeft: "8px",
+                                              color: "#fff",
+                                            }}
+                                          >
+                                            x {amount}
+                                          </span>
+                                        </li>
+                                      );
+                                    });
+                                }
+                              )}
+                            </ul>
+                          </details>
+                        );
+                      }
+                    );
+                  })()}
+                </div>
+              </div>
+            </div>
+            {/* Right: Planet image, half hidden */}
+            <div
+              style={{
+                flex: 1,
+                position: "relative",
+                overflow: "hidden",
+                minHeight: "400px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "flex-start",
+              }}
+            >
+              <div
+                style={{
+                  width: "900px",
+                  height: "900px",
+                  marginLeft: "30%",
+                  marginTop: "-70px",
+                  overflow: "hidden",
+                }}
+              >
+                <img
+                  src={`maps/${zoomedWorld.name}.png`}
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    borderRadius: "5%",
+                    objectPosition: "left",
+                    objectFit: "cover",
+                  }}
+                  onError={(e) => {
+                    e.target.src = "maps/placeholder.png";
+                  }}
+                  alt={zoomedWorld.name}
+                />
+              </div>
+            </div>
+          </div>
+        ) : !selectedSystem ? (
           <div className="system-selection">
             <h3>Select Solar System:</h3>
             <div className="system-buttons">
@@ -247,7 +472,7 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
             ) : (
               <div className="worlds-grid" style={{ paddingBottom: "48px" }}>
                 {solarSystems[selectedSystem].map((worldName) => {
-                  // Get all fleets at this world
+                  // ...existing code...
                   const fleetsAtWorld = Object.entries(systemData).reduce(
                     (acc, [factionName, fleets]) => {
                       const worldFleets = fleets.filter(
@@ -271,8 +496,10 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
                     (fleet) =>
                       fleet.factionName.toLowerCase() ===
                         currentFaction.toLowerCase() &&
-                      ["Defense", "Patrol", "Attack"].includes(
-                        fleet.State?.Action
+                      ["Defense", "Patrol", "Battle", "Activating"].includes(
+                        fleet.State?.Action === "Activating"
+                          ? "Idle"
+                          : fleet.State?.Action
                       )
                   );
 
@@ -327,18 +554,33 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
                         }))
                   );
 
+                  // --- PATCH: Make planet image clickable if current faction has active combat units ---
+                  const canZoomIn = currentFactionActiveCombatUnits.length > 0;
+
                   return (
                     <div key={worldName} className="world-container">
                       <div className="world-circle">
                         <div className="world-name">{worldName}</div>
                         <div className="world-center">
                           {/* Greyscale if current faction has no units here (fog of war) */}
-                          <PlanetImageOrEmoji
-                            planetName={worldName}
-                            grayscale={
-                              currentFactionActiveCombatUnits.length === 0
-                            }
-                          />
+                          <div
+                            style={{
+                              cursor: canZoomIn ? "pointer" : "default",
+                            }}
+                            onClick={() => {
+                              if (canZoomIn)
+                                setZoomedWorld({
+                                  name: worldName,
+                                });
+                            }}
+                          >
+                            <PlanetImageOrEmoji
+                              planetName={worldName}
+                              grayscale={
+                                currentFactionActiveCombatUnits.length === 0
+                              }
+                            />
+                          </div>
                         </div>
 
                         {/* Ground units inner ring */}
@@ -362,9 +604,10 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
                                 onClick={() =>
                                   openFleetModal(fleet, fleet.factionName)
                                 }
-                                title={`${fleet.factionName} - ${
-                                  fleet.Name || `Fleet ${fleet.ID}`
-                                }`}
+                                title={`${
+                                  allFactions[fleet.factionName]?.name ||
+                                  fleet.factionName
+                                } - ${fleet.Name || `Fleet ${fleet.ID}`}`}
                               >
                                 {getFleetIcon(fleet)}
                               </div>
@@ -435,8 +678,9 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
                 <h3
                   style={{ color: getFactionColor(selectedFleet.factionName) }}
                 >
-                  {selectedFleet.factionName} -{" "}
-                  {selectedFleet.Name || `Fleet ${selectedFleet.ID}`}
+                  {allFactions[selectedFleet.factionName]?.name ||
+                    selectedFleet.factionName}{" "}
+                  - {selectedFleet.Name || `Fleet ${selectedFleet.ID}`}
                 </h3>
                 <button className="close-btn" onClick={closeFleetModal}>
                   ✕
@@ -451,7 +695,9 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
                     </p>
                     <p>
                       <strong>Status:</strong>{" "}
-                      {selectedFleet.State?.Action || "Unknown"}
+                      {selectedFleet.State?.Action === "Activating"
+                        ? "Activating"
+                        : selectedFleet.State?.Action || "Unknown"}
                     </p>
                     <p>
                       <strong>Type:</strong> {selectedFleet.Type || "Unknown"}
@@ -495,8 +741,15 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
                             (fleet) =>
                               fleet.factionName.toLowerCase() ===
                                 currentFaction.toLowerCase() &&
-                              ["Defense", "Patrol", "Attack"].includes(
-                                fleet.State?.Action
+                              [
+                                "Defense",
+                                "Patrol",
+                                "Battle",
+                                "Activating",
+                              ].includes(
+                                fleet.State?.Action === "Activating"
+                                  ? "Idle"
+                                  : fleet.State?.Action
                               )
                           );
                         const hasActiveUnit =
@@ -517,7 +770,7 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
                                 vehicleRecord?.data?.stealth === true;
                               if (
                                 isStealth &&
-                                selectedFleet.State?.Action !== "Attack"
+                                selectedFleet.State?.Action !== "Battle"
                               ) {
                                 return false;
                               }

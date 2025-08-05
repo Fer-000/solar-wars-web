@@ -40,7 +40,9 @@ const Dashboard = ({
       <StarField density={120} />
       {/* Content wrapper must have position: relative and higher z-index */}
       <div className="dashboard-content">
-        <div className="stardate-top">{formatSolarDate()}</div>
+        <div className="stardate-top">
+          {formatSolarDate(new Date(Date.now()))}
+        </div>
 
         <div className="welcome-section">
           <h1>Welcome, {treatment}</h1>

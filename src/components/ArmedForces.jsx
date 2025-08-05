@@ -19,6 +19,7 @@ const ArmedForces = ({ onBack, nationName = "athena", dbLoaded }) => {
   const [editUnitName, setEditUnitName] = useState("");
   const [editUnitType, setEditUnitType] = useState("");
   const [editUnitLocation, setEditUnitLocation] = useState("");
+  const [totalHexes, setTotalHexes] = useState(0);
   // For vehicle transfer UI
   const [transferTargetFleetId, setTransferTargetFleetId] = useState(null);
   const [transferAmounts, setTransferAmounts] = useState({});
@@ -71,6 +72,23 @@ const ArmedForces = ({ onBack, nationName = "athena", dbLoaded }) => {
             population: factionData.population,
             controlledWorlds: factionData.controlledWorlds || 0,
           });
+
+          // Calculate total hexes (sum all Hexes from all worlds in maps)
+          const maps = factionData.maps || {};
+          const totalHexesCount = Object.values(maps).reduce((sum, info) => {
+            // info can be a number (old format) or object (new format)
+            if (
+              typeof info === "object" &&
+              info !== null &&
+              typeof info.Hexes === "number"
+            ) {
+              return sum + info.Hexes;
+            } else if (typeof info === "number") {
+              return sum + info;
+            }
+            return sum;
+          }, 0);
+          setTotalHexes(totalHexesCount);
 
           // Convert Discord bot fleets to UI format
           const convertedUnits = databaseService.convertFleetsToUnits(
@@ -152,6 +170,36 @@ const ArmedForces = ({ onBack, nationName = "athena", dbLoaded }) => {
     scouts: 156,
   };
 
+  // Placeholder maps for hex calculation (simulate EconomicMap logic)
+  const placeholderMaps = {
+    Mars: { Hexes: 12 },
+    Earth: { Hexes: 8 },
+    Venus: { Hexes: 5 },
+    Jupiter: { Hexes: 0 },
+  };
+
+  useEffect(() => {
+    if (!dbLoaded) {
+      // Calculate total hexes from placeholderMaps
+      const totalHexesCount = Object.values(placeholderMaps).reduce(
+        (sum, info) => {
+          if (
+            typeof info === "object" &&
+            info !== null &&
+            typeof info.Hexes === "number"
+          ) {
+            return sum + info.Hexes;
+          } else if (typeof info === "number") {
+            return sum + info;
+          }
+          return sum;
+        },
+        0
+      );
+      setTotalHexes(totalHexesCount);
+    }
+  }, [dbLoaded]);
+
   const openUnitModal = (unit) => {
     setEditUnitName(unit.name || "");
     setEditUnitType(unit.type || "Space");
@@ -184,10 +232,17 @@ const ArmedForces = ({ onBack, nationName = "athena", dbLoaded }) => {
         Name: `Fleet ${currentFleets.length}`,
         Type: "Space",
         Vehicles: [], // Empty fleet to start
+        Value: {
+          CM: 0,
+          CS: 0,
+          EL: 0,
+          ER: 0,
+        },
         State: {
           Action: "Defense",
           Location: "Earth",
         },
+        CSCost: 0,
       };
 
       // Add to fleets array
@@ -293,13 +348,38 @@ const ArmedForces = ({ onBack, nationName = "athena", dbLoaded }) => {
           (f) => f.ID === transferTargetFleetId
         );
         if (targetFleetIndex !== -1) {
+          // Initialize fleet values if not present
+          if (!fleets[fleetIndex].Value) {
+            fleets[fleetIndex].Value = { CM: 0, CS: 0, EL: 0, ER: 0 };
+          }
+          if (!fleets[targetFleetIndex].Value) {
+            fleets[targetFleetIndex].Value = { CM: 0, CS: 0, EL: 0, ER: 0 };
+          }
+          if (!fleets[fleetIndex].CSCost) {
+            fleets[fleetIndex].CSCost = 0;
+          }
+          if (!fleets[targetFleetIndex].CSCost) {
+            fleets[targetFleetIndex].CSCost = 0;
+          }
+
           // For each vehicle type, move the specified amount
           Object.entries(transferAmounts).forEach(([vehicleName, amount]) => {
             if (amount <= 0) return; // Skip if no transfer
 
-            // Find vehicle by name in allVehicles to get ID
+            // Find vehicle by name in allVehicles to get ID and cost data
             const vehicleData = allVehicles.find((v) => v.name === vehicleName);
             if (!vehicleData) return;
+
+            // Calculate value and CS cost for the transferred vehicles
+            const vehicleValue = {
+              CM: (vehicleData.cost?.CM || 0) * amount,
+              CS: (vehicleData.cost?.CS || 0) * amount,
+              EL: (vehicleData.cost?.EL || 0) * amount,
+              ER: (vehicleData.cost?.ER || 0) * amount,
+            };
+            const vehicleCSCost = Math.floor(
+              ((vehicleData.cost?.CS || 0) * amount) / 6
+            );
 
             // Remove from source fleet
             const sourceVehicle = fleets[fleetIndex].Vehicles.find(
@@ -307,6 +387,14 @@ const ArmedForces = ({ onBack, nationName = "athena", dbLoaded }) => {
             );
             if (sourceVehicle && sourceVehicle.count >= amount) {
               sourceVehicle.count -= amount;
+
+              // Remove value from source fleet
+              fleets[fleetIndex].Value.CM -= vehicleValue.CM;
+              fleets[fleetIndex].Value.CS -= vehicleValue.CS;
+              fleets[fleetIndex].Value.EL -= vehicleValue.EL;
+              fleets[fleetIndex].Value.ER -= vehicleValue.ER;
+              fleets[fleetIndex].CSCost -= vehicleCSCost;
+
               // Remove vehicle entry if count becomes 0
               if (sourceVehicle.count === 0) {
                 fleets[fleetIndex].Vehicles = fleets[
@@ -325,6 +413,13 @@ const ArmedForces = ({ onBack, nationName = "athena", dbLoaded }) => {
               fleets[targetFleetIndex].Vehicles.push(targetVehicle);
             }
             targetVehicle.count += amount;
+
+            // Add value to target fleet
+            fleets[targetFleetIndex].Value.CM += vehicleValue.CM;
+            fleets[targetFleetIndex].Value.CS += vehicleValue.CS;
+            fleets[targetFleetIndex].Value.EL += vehicleValue.EL;
+            fleets[targetFleetIndex].Value.ER += vehicleValue.ER;
+            fleets[targetFleetIndex].CSCost += vehicleCSCost;
           });
         }
       }
@@ -406,19 +501,26 @@ const ArmedForces = ({ onBack, nationName = "athena", dbLoaded }) => {
       const fleetIndex = fleets.findIndex((f) => f.ID === selectedUnit.id);
       if (fleetIndex === -1) return;
 
+      // Map 'Activate' to 'Idle', 'Attack' to 'Battle'
+      let mappedAction = action;
+      if (action === "Activate") mappedAction = "Idle";
+      if (action === "Attack") mappedAction = "Battle";
+
       fleets[fleetIndex].State = {
         ...fleets[fleetIndex].State,
-        Action: action,
+        Action: mappedAction,
       };
 
       await databaseService.updateFleets("The Solar Wars", nationName, fleets);
 
       setUnits((prev) =>
         prev.map((u) =>
-          u.id === selectedUnit.id ? { ...u, state: action, status: action } : u
+          u.id === selectedUnit.id
+            ? { ...u, state: mappedAction, status: mappedAction }
+            : u
         )
       );
-      console.log(`Fleet ${selectedUnit.name} action set to ${action}`);
+      console.log(`Fleet ${selectedUnit.name} action set to ${mappedAction}`);
     } catch (err) {
       console.error("Failed to update unit action:", err);
     }
@@ -523,6 +625,16 @@ const ArmedForces = ({ onBack, nationName = "athena", dbLoaded }) => {
                     {loading
                       ? "Loading..."
                       : nationInfo.population.toLocaleString()}
+                  </span>
+                </div>
+                <div className="info-item">
+                  <span className="info-label">Total Hexes:</span>
+                  <span className="info-value">
+                    {loading
+                      ? "Loading..."
+                      : typeof totalHexes === "number"
+                      ? totalHexes.toLocaleString()
+                      : totalHexes || "0"}
                   </span>
                 </div>
               </div>
@@ -761,13 +873,14 @@ const ArmedForces = ({ onBack, nationName = "athena", dbLoaded }) => {
                     >
                       Move Unit
                     </button>
-                    <button
-                      className="command-btn activate"
-                      disabled={selectedUnit.status === "Active"}
-                      onClick={() => handleUpdateStatus("Active")}
-                    >
-                      Activate
-                    </button>
+                    {selectedUnit.status === "Mothballed" && (
+                      <button
+                        className="command-btn activate"
+                        onClick={() => handleUpdateAction("Activate")}
+                      >
+                        Activate
+                      </button>
+                    )}
                     <button
                       className="command-btn mothball"
                       disabled={selectedUnit.status === "Mothballed"}
@@ -782,10 +895,10 @@ const ArmedForces = ({ onBack, nationName = "athena", dbLoaded }) => {
                       Defense
                     </button>
                     <button
-                      className="command-btn attack"
-                      onClick={() => handleUpdateAction("Attack")}
+                      className="command-btn battle"
+                      onClick={() => handleUpdateAction("Battle")}
                     >
-                      Attack
+                      Battle
                     </button>
                     <button
                       className="command-btn patrol"
@@ -808,7 +921,41 @@ const ArmedForces = ({ onBack, nationName = "athena", dbLoaded }) => {
                   >
                     Edit Unit
                   </button>
-                  <button className="delete-btn">Disband Unit</button>
+                  <button
+                    className="delete-btn"
+                    onClick={async () => {
+                      if (!selectedUnit) return;
+                      try {
+                        // Get fleets from database
+                        const fleets = await databaseService.getFleets(
+                          "The Solar Wars",
+                          nationName
+                        );
+                        // Remove the selected fleet
+                        const updatedFleets = fleets.filter(
+                          (f) => f.ID !== selectedUnit.id
+                        );
+                        await databaseService.updateFleets(
+                          "The Solar Wars",
+                          nationName,
+                          updatedFleets
+                        );
+                        // Update local state
+                        setUnits((prev) =>
+                          prev.filter((u) => u.id !== selectedUnit.id)
+                        );
+                        setShowModal(false);
+                        setSelectedUnit(null);
+                        console.log(
+                          `Fleet ${selectedUnit.name} disbanded successfully`
+                        );
+                      } catch (err) {
+                        console.error("Failed to disband unit:", err);
+                      }
+                    }}
+                  >
+                    Disband Unit
+                  </button>
                 </div>
               </div>
             </div>

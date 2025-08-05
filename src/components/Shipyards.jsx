@@ -27,12 +27,12 @@ const Shipyards = ({
   const [activeCategory, setActiveCategory] = useState(0);
 
   const categories = [
-    { id: "ship", name: "Ship", icon: "🚢" },
-    { id: "aircraft", name: "Aircraft", icon: "✈️" },
-    { id: "ground", name: "Ground", icon: "🚗" },
+    { id: "ship", name: "Ship", icon: "icons/raters/ship.png" },
+    { id: "aircraft", name: "Aircraft", icon: "icons/raters/air.png" },
+    { id: "ground", name: "Ground", icon: "icons/raters/ground.png" },
     { id: "missile", name: "Missile", icon: "icons/raters/missile.png" },
     { id: "infantry", name: "Infantry", icon: "icons/raters/infantry.png" },
-    { id: "platform", name: "Platform", icon: "🏗️" },
+    { id: "platform", name: "Platform", icon: "icons/raters/platform.png" },
   ];
 
   const vehicles = [

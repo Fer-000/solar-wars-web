@@ -52,7 +52,30 @@ function App() {
       await fetchAndCacheDB();
     }
     setNationId(id);
-    setUserSettings((prev) => ({ ...prev, nationName: prev.nationName || id }));
+
+    // Set factionId and load faction data from database
+    setUserSettings((prev) => ({
+      ...prev,
+      factionId: id,
+      nationName: prev.nationName || id,
+    }));
+
+    // Load faction data from database to get proper name, leader, and color
+    try {
+      const faction = await databaseService.getFaction("The Solar Wars", id);
+      if (faction) {
+        setUserSettings((prev) => ({
+          ...prev,
+          factionId: id,
+          treatment: faction.leader || prev.treatment,
+          nationName: faction.name || prev.nationName || id,
+          themeColor: faction.color || prev.themeColor,
+        }));
+      }
+    } catch (error) {
+      console.error("Error loading faction data on login:", error);
+    }
+
     setCurrentView("dashboard");
   };
 
@@ -136,7 +159,7 @@ function App() {
     return (
       <ArmedForces
         onBack={handleBackToDashboard}
-        nationName={userSettings.nationName || nationId}
+        nationName={nationId}
         dbLoaded={dbLoaded}
       />
     );
