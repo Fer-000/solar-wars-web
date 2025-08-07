@@ -520,6 +520,7 @@ const ArmedForces = ({ onBack, nationName = "athena", dbLoaded }) => {
             : u
         )
       );
+      setShowModal(false); // <-- Close the modal after action
       console.log(`Fleet ${selectedUnit.name} action set to ${mappedAction}`);
     } catch (err) {
       console.error("Failed to update unit action:", err);
@@ -579,7 +580,6 @@ const ArmedForces = ({ onBack, nationName = "athena", dbLoaded }) => {
           <button className="back-button" onClick={onBack}>
             ← Back to Homepage
           </button>
-          <h2>⚔️ Armed Forces Command</h2>
         </div>
         <p className="center-subtitle">
           {nationInfo.name.charAt(0).toUpperCase() + nationInfo.name.slice(1)}{" "}

@@ -22,6 +22,8 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
   const [showFleetModal, setShowFleetModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [zoomedWorld, setZoomedWorld] = useState(null); // { name, animate }
+  const [collapsedFactions, setCollapsedFactions] = useState(new Set());
+  const [scrollPosition, setScrollPosition] = useState(0);
 
   const solarSystems = {
     Sol: [
@@ -216,6 +218,38 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
     return getRandomColor(factionName);
   };
 
+  const toggleFactionCollapse = (factionName, worldName) => {
+    const key = `${factionName}-${worldName}`;
+    const newCollapsed = new Set(collapsedFactions);
+    if (newCollapsed.has(key)) {
+      newCollapsed.delete(key);
+    } else {
+      newCollapsed.add(key);
+    }
+    setCollapsedFactions(newCollapsed);
+  };
+
+  // Save scroll position before zooming
+  const handleZoomIn = (worldName) => {
+    const container = document.querySelector(".worlds-grid");
+    if (container) {
+      setScrollPosition(container.scrollTop);
+    }
+    setZoomedWorld({ name: worldName });
+  };
+
+  // Restore scroll position when going back
+  const handleBackToMap = () => {
+    setZoomedWorld(null);
+    // Restore scroll position after state update
+    setTimeout(() => {
+      const container = document.querySelector(".worlds-grid");
+      if (container) {
+        container.scrollTop = scrollPosition;
+      }
+    }, 0);
+  };
+
   return (
     <div className="tactical-map-overlay">
       <div className="tactical-map-container">
@@ -228,16 +262,7 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
 
         {/* Zoomed-in planet view */}
         {zoomedWorld ? (
-          <div
-            className="zoomed-planet-area"
-            style={{
-              display: "flex",
-              flexDirection: "row",
-              minHeight: "400px",
-              overflow: "hidden",
-              position: "relative",
-            }}
-          >
+          <div className="zoomed-planet-area">
             {/* Left: Buildings info, scroll bar on left, button at top */}
             <div
               style={{
@@ -247,9 +272,7 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
                 position: "relative",
               }}
             >
-              <button onClick={() => setZoomedWorld(null)}>
-                ← Back to Map
-              </button>
+              <button onClick={handleBackToMap}>← Back to Map</button>
               <h3 style={{ marginBottom: "16px", marginTop: "48px" }}>
                 {zoomedWorld.name} - Buildings
               </h3>
@@ -492,24 +515,30 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
                   );
 
                   // Determine if current faction has at least one active unit (Defense, Patrol, Attack)
-                  const currentFactionActiveCombatUnits = fleetsAtWorld.filter(
+                  const currentFactionFleetsWithShips = fleetsAtWorld.filter(
                     (fleet) =>
                       fleet.factionName.toLowerCase() ===
                         currentFaction.toLowerCase() &&
+                      fleet.Vehicles &&
+                      fleet.Vehicles.reduce(
+                        (sum, v) => sum + (v.count || 0),
+                        0
+                      ) > 0
+                  );
+
+                  const currentFactionActiveCombatUnits =
+                    currentFactionFleetsWithShips.filter((fleet) =>
                       ["Defense", "Patrol", "Battle", "Activating"].includes(
                         fleet.State?.Action === "Activating"
                           ? "Idle"
                           : fleet.State?.Action
                       )
-                  );
+                    );
 
-                  // Only show fleet pointers if current faction has a fleet at this world
-                  const currentFactionHasFleetHere = fleetsAtWorld.some(
-                    (fleet) =>
-                      fleet.factionName.toLowerCase() ===
-                      currentFaction.toLowerCase()
-                  );
-                  const visibleFleets = currentFactionHasFleetHere
+                  // Only show fleet pointers if current faction has fleets with ships > 0
+                  const currentFactionHasValidFleetHere =
+                    currentFactionFleetsWithShips.length > 0;
+                  const visibleFleets = currentFactionHasValidFleetHere
                     ? fleetsAtWorld
                     : fleetsAtWorld.filter(
                         (fleet) =>
@@ -517,8 +546,40 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
                           currentFaction.toLowerCase()
                       );
 
-                  // Separate ground and space units
-                  const groundUnits = visibleFleets.filter(
+                  // Group fleets by faction for collapse feature
+                  const fleetsByFaction = visibleFleets.reduce((acc, fleet) => {
+                    if (!acc[fleet.factionName]) acc[fleet.factionName] = [];
+                    acc[fleet.factionName].push(fleet);
+                    return acc;
+                  }, {});
+
+                  // Create display fleets (collapsed or expanded)
+                  const displayFleets = [];
+                  Object.entries(fleetsByFaction).forEach(
+                    ([factionName, factionFleets]) => {
+                      const collapseKey = `${factionName}-${worldName}`;
+                      if (
+                        collapsedFactions.has(collapseKey) &&
+                        factionFleets.length > 1
+                      ) {
+                        // Show single collapsed fleet
+                        displayFleets.push({
+                          ...factionFleets[0],
+                          isCollapsed: true,
+                          collapsedCount: factionFleets.length,
+                          factionName,
+                        });
+                      } else {
+                        // Show all fleets normally
+                        factionFleets.forEach((fleet) =>
+                          displayFleets.push(fleet)
+                        );
+                      }
+                    }
+                  );
+
+                  // Separate ground and space units from display fleets
+                  const groundUnits = displayFleets.filter(
                     (fleet) =>
                       fleet.Type !== "Space" ||
                       (fleet.Vehicles &&
@@ -536,7 +597,7 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
                         }))
                   );
 
-                  const spaceUnits = visibleFleets.filter(
+                  const spaceUnits = displayFleets.filter(
                     (fleet) =>
                       fleet.Type === "Space" &&
                       (!fleet.Vehicles ||
@@ -568,10 +629,7 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
                               cursor: canZoomIn ? "pointer" : "default",
                             }}
                             onClick={() => {
-                              if (canZoomIn)
-                                setZoomedWorld({
-                                  name: worldName,
-                                });
+                              if (canZoomIn) handleZoomIn(worldName);
                             }}
                           >
                             <PlanetImageOrEmoji
@@ -592,9 +650,42 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
                               Math.cos((angle * Math.PI) / 180) * radius;
                             const y =
                               Math.sin((angle * Math.PI) / 180) * radius;
+                            // If collapsed, show number of fleets and arrow, and clicking uncollapses
+                            if (fleet.isCollapsed) {
+                              return (
+                                <div
+                                  key={`ground-${fleet.factionName}-collapsed`}
+                                  className="fleet-marker"
+                                  style={{
+                                    transform: `translate(${x}px, ${y}px)`,
+                                    color: getFactionColor(fleet.factionName),
+                                    cursor: "pointer",
+                                    fontWeight: "bold",
+                                    fontSize: "18px",
+                                    background: "#222b",
+                                    borderRadius: "50%",
+                                    padding: "2px 8px",
+                                    border: "1px solid #444",
+                                  }}
+                                  onClick={() =>
+                                    toggleFactionCollapse(
+                                      fleet.factionName,
+                                      worldName
+                                    )
+                                  }
+                                  title={`${fleet.collapsedCount} ${
+                                    allFactions[fleet.factionName]?.name ||
+                                    fleet.factionName
+                                  } fleets (click to expand)`}
+                                >
+                                  {fleet.collapsedCount}↑
+                                </div>
+                              );
+                            }
+                            // Normal fleet marker
                             return (
                               <div
-                                key={`ground-${fleet.factionName}-${fleet.ID}`}
+                                key={`ground-${fleet.factionName}-${fleet.ID}-normal`}
                                 className="fleet-marker"
                                 style={{
                                   transform: `translate(${x}px, ${y}px)`,
@@ -623,9 +714,40 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
                               Math.cos((angle * Math.PI) / 180) * radius;
                             const y =
                               Math.sin((angle * Math.PI) / 180) * radius;
+                            if (fleet.isCollapsed) {
+                              return (
+                                <div
+                                  key={`space-${fleet.factionName}-collapsed`}
+                                  className="fleet-marker"
+                                  style={{
+                                    transform: `translate(${x}px, ${y}px)`,
+                                    color: getFactionColor(fleet.factionName),
+                                    cursor: "pointer",
+                                    fontWeight: "bold",
+                                    fontSize: "18px",
+                                    background: "#222b",
+                                    borderRadius: "50%",
+                                    padding: "2px 8px",
+                                    border: "1px solid #444",
+                                  }}
+                                  onClick={() =>
+                                    toggleFactionCollapse(
+                                      fleet.factionName,
+                                      worldName
+                                    )
+                                  }
+                                  title={`${fleet.collapsedCount} ${
+                                    allFactions[fleet.factionName]?.name ||
+                                    fleet.factionName
+                                  } fleets (click to expand)`}
+                                >
+                                  {fleet.collapsedCount}↑
+                                </div>
+                              );
+                            }
                             return (
                               <div
-                                key={`space-${fleet.factionName}-${fleet.ID}`}
+                                key={`space-${fleet.factionName}-${fleet.ID}-normal`}
                                 className="fleet-marker"
                                 style={{
                                   transform: `translate(${x}px, ${y}px)`,
@@ -635,9 +757,10 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
                                 onClick={() =>
                                   openFleetModal(fleet, fleet.factionName)
                                 }
-                                title={`${fleet.factionName} - ${
-                                  fleet.Name || `Fleet ${fleet.ID}`
-                                }`}
+                                title={`${
+                                  allFactions[fleet.factionName]?.name ||
+                                  fleet.factionName
+                                } - ${fleet.Name || `Fleet ${fleet.ID}`}`}
                               >
                                 {getFleetIcon(fleet)}
                               </div>
@@ -648,16 +771,22 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
 
                       <div className="world-info">
                         <div className="world-fleets-count">
-                          {fleetsAtWorld.some(
-                            (fleet) =>
-                              fleet.factionName.toLowerCase() ===
-                              currentFaction.toLowerCase()
-                          )
-                            ? `${groundUnits.length} ground unit${
+                          {currentFactionHasValidFleetHere
+                            ? `${
+                                groundUnits.filter((f) => !f.isCollapsed)
+                                  .length +
+                                groundUnits
+                                  .filter((f) => f.isCollapsed)
+                                  .reduce((sum, f) => sum + f.collapsedCount, 0)
+                              } ground unit${
                                 groundUnits.length !== 1 ? "s" : ""
-                              }, ${spaceUnits.length} space unit${
-                                spaceUnits.length !== 1 ? "s" : ""
-                              }`
+                              }, ${
+                                spaceUnits.filter((f) => !f.isCollapsed)
+                                  .length +
+                                spaceUnits
+                                  .filter((f) => f.isCollapsed)
+                                  .reduce((sum, f) => sum + f.collapsedCount, 0)
+                              } space unit${spaceUnits.length !== 1 ? "s" : ""}`
                             : "? units"}
                         </div>
                       </div>
@@ -671,7 +800,6 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
 
         {/* Fleet Detail Modal */}
         {showFleetModal && selectedFleet && (
-          // ...existing code...
           <div className="fleet-modal-overlay" onClick={closeFleetModal}>
             <div className="fleet-modal" onClick={(e) => e.stopPropagation()}>
               <div className="fleet-modal-header">
@@ -833,6 +961,33 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
                     )}
                   </div>
                 </div>
+
+                {/* Add the Collapse Nation button for enemy fleets */}
+                {selectedFleet.factionName.toLowerCase() !==
+                  currentFaction.toLowerCase() && (
+                  <div style={{ marginTop: "16px", textAlign: "center" }}>
+                    <button
+                      onClick={() => {
+                        toggleFactionCollapse(
+                          selectedFleet.factionName,
+                          selectedFleet.State?.Location
+                        );
+                        closeFleetModal();
+                      }}
+                      style={{
+                        padding: "8px 16px",
+                        backgroundColor: "#444",
+                        color: "white",
+                        border: "1px solid #666",
+                        borderRadius: "4px",
+                        cursor: "pointer",
+                        fontSize: "14px",
+                      }}
+                    >
+                      Collapse Nation
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
