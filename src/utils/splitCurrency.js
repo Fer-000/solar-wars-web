@@ -12,7 +12,7 @@ const splitCurrency = (input = "", def = "ER") => {
         }
         
         return result.length > 0 ? result : [[NaN, def]];
-    } catch (e) {
+    } catch {
         return [[NaN, def]];
     }
 }
