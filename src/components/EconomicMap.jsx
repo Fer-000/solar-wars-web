@@ -77,12 +77,9 @@ const EconomicMap = ({ nationName, onHexesUpdate }) => {
         );
 
         // Store building definitions
-        const buildingDefs = Array.isArray(factionData.buildings)
-          ? factionData.buildings
-          : Array.isArray(factionData.Buildings)
-          ? factionData.Buildings
-          : [];
+        const buildingDefs = factionData.Buildings;
         setBuildingDefs(buildingDefs);
+        console.log("Building definitions loaded:", buildingDefs);
 
         // Find worlds with forces or hexes
         const maps = factionData.maps || factionData.Maps || {};
@@ -157,41 +154,25 @@ const EconomicMap = ({ nationName, onHexesUpdate }) => {
           "The Solar Wars",
           factionId
         );
-        // --- TacticalMap logic: buildings are in factionData.Maps[selectedWorld]?.Buildings ---
-        let buildingsArr = [];
+        // Get building definitions
+        const buildingDefs = factionData.buildings;
+        setBuildingDefs(buildingDefs);
+        // Get world buildings
         const mapInfo =
           (factionData.maps && factionData.maps[selectedWorld]) ||
           (factionData.Maps && factionData.Maps[selectedWorld]);
-        const buildingDefs = Array.isArray(factionData.buildings)
-          ? factionData.buildings
-          : Array.isArray(factionData.Buildings)
-          ? factionData.Buildings
-          : [];
-        if (mapInfo && Array.isArray(mapInfo.Buildings)) {
-          buildingsArr = mapInfo.Buildings.map((levelsObj, buildingIdx) => {
-            if (!levelsObj || typeof levelsObj !== "object") return null;
-            const def = buildingDefs[buildingIdx];
-            if (!def) return null;
-            const name = def.name || def.Name || `Building ${buildingIdx}`;
-            const type = def.type || def.Type || "";
-            // levelsObj: { [level]: amount }, key 0 = level 1, key 9 = level 10
-            return Object.entries(levelsObj)
-              .filter(([levelKey, amount]) => {
-                // Only show if amount > 0, and skip level 1 if amount is 0
-                if (levelKey === "0" && amount === 0) return false;
-                return amount > 0;
-              })
-              .map(([levelKey, amount]) => ({
-                name,
-                type,
-                level: parseInt(levelKey) + 1,
-                amount,
-              }));
-          })
-            .flat()
-            .filter(Boolean);
-        }
-        setBuildings(buildingsArr);
+        const worldBuildings = mapInfo?.Buildings || [];
+        // Use the same formatting as in formatWorldBuildings
+        const formatted = formatWorldBuildings(worldBuildings, buildingDefs);
+        console.log(
+          "World buildings raw:",
+          worldBuildings,
+          "Defs:",
+          buildingDefs,
+          "Formatted:",
+          formatted
+        );
+        setBuildings(formatted);
       } catch (err) {
         setError("Failed to load buildings: " + err.message);
       } finally {
@@ -288,6 +269,36 @@ const EconomicMap = ({ nationName, onHexesUpdate }) => {
           </div>
           <div className="economic-map-buildings-panel">
             <h4 className="economic-map-buildings-title">Buildings</h4>
+            <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
+              <button
+                style={{
+                  padding: "6px 14px",
+                  background: "#00f5ff",
+                  color: "#222",
+                  border: "none",
+                  borderRadius: "4px",
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                }}
+                onClick={() => alert("Buy building (not implemented)")}
+              >
+                + Buy Building
+              </button>
+              <button
+                style={{
+                  padding: "6px 14px",
+                  background: "#444",
+                  color: "#fff",
+                  border: "1px solid #00f5ff",
+                  borderRadius: "4px",
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                }}
+                onClick={() => alert("Set capital (not implemented)")}
+              >
+                Set Capital
+              </button>
+            </div>
             {buildings.length === 0 ? (
               <div className="economic-map-no-buildings">
                 No buildings found for this world.
@@ -304,25 +315,88 @@ const EconomicMap = ({ nationName, onHexesUpdate }) => {
                       background: "rgba(0, 245, 255, 0.1)",
                       borderRadius: "4px",
                       border: "1px solid rgba(0, 245, 255, 0.2)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: "12px",
                     }}
                   >
-                    <div style={{ fontWeight: "bold", color: "#00f5ff" }}>
-                      {b.name}
+                    <div>
+                      <div style={{ fontWeight: "bold", color: "#00f5ff" }}>
+                        {b.name}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: "0.9em",
+                          color: "#ccc",
+                          marginTop: "2px",
+                        }}
+                      >
+                        {b.type && (
+                          <span style={{ color: "#888" }}>
+                            Type: {b.type} •
+                          </span>
+                        )}
+                        <span style={{ color: "#00f5ff" }}>
+                          Level {b.level}
+                        </span>
+                        <span style={{ color: "#fff", marginLeft: "8px" }}>
+                          Amount: {b.amount}
+                        </span>
+                      </div>
                     </div>
-                    <div
-                      style={{
-                        fontSize: "0.9em",
-                        color: "#ccc",
-                        marginTop: "2px",
-                      }}
-                    >
-                      {b.type && (
-                        <span style={{ color: "#888" }}>Type: {b.type} •</span>
-                      )}
-                      <span style={{ color: "#00f5ff" }}>Level {b.level}</span>
-                      <span style={{ color: "#fff", marginLeft: "8px" }}>
-                        Amount: {b.amount}
-                      </span>
+                    <div style={{ display: "flex", gap: "6px" }}>
+                      <button
+                        style={{
+                          padding: "4px 8px",
+                          background: "#00f5ff",
+                          color: "#222",
+                          border: "none",
+                          borderRadius: "4px",
+                          fontWeight: "bold",
+                          cursor: "pointer",
+                        }}
+                        title="Upgrade"
+                        onClick={() =>
+                          alert(`Upgrade ${b.name} (not implemented)`)
+                        }
+                      >
+                        Upgrade
+                      </button>
+                      <button
+                        style={{
+                          padding: "4px 8px",
+                          background: "#444",
+                          color: "#fff",
+                          border: "1px solid #00f5ff",
+                          borderRadius: "4px",
+                          fontWeight: "bold",
+                          cursor: "pointer",
+                        }}
+                        title="Downgrade"
+                        onClick={() =>
+                          alert(`Downgrade ${b.name} (not implemented)`)
+                        }
+                      >
+                        Downgrade
+                      </button>
+                      <button
+                        style={{
+                          padding: "4px 8px",
+                          background: "#f55",
+                          color: "#fff",
+                          border: "none",
+                          borderRadius: "4px",
+                          fontWeight: "bold",
+                          cursor: "pointer",
+                        }}
+                        title="Sell"
+                        onClick={() =>
+                          alert(`Sell ${b.name} (not implemented)`)
+                        }
+                      >
+                        Sell
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -397,6 +471,16 @@ const EconomicMap = ({ nationName, onHexesUpdate }) => {
                         const worldBuildings = formatWorldBuildings(
                           world.buildings,
                           buildingDefs
+                        );
+                        console.log(
+                          "Overview world:",
+                          world.name,
+                          "Raw:",
+                          world.buildings,
+                          "Defs:",
+                          buildingDefs,
+                          "Formatted:",
+                          worldBuildings
                         );
 
                         if (worldBuildings.length > 0) {
