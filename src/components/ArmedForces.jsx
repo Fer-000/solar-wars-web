@@ -6,6 +6,53 @@ import globalDB from "../services/GlobalDB";
 import "./CenterPage.css";
 import "./ArmedForces.css";
 
+// Hardcoded world list for move unit modal, in desired order
+const worlds = [
+  "Mercury",
+  "Venus",
+  "Earth",
+  "Luna",
+  "Mars",
+  "Ceres",
+  "Asteroid Belt Area A",
+  "Asteroid Belt Area B",
+  "Asteroid Belt Area C",
+  "Jupiter",
+  "Io",
+  "Europa",
+  "Ganymede",
+  "Callisto",
+  "Saturn",
+  "Mimas",
+  "Enceladus",
+  "Tethys",
+  "Dione",
+  "Rhea",
+  "Titan",
+  "Iapetus",
+  "Uranus",
+  "Miranda",
+  "Ariel",
+  "Umbriel",
+  "Titania",
+  "Oberon",
+  "Neptune",
+  "Triton",
+  "Proteus",
+  "Nereid",
+  "Pluto",
+  "Charon",
+  // Corelli worlds
+  "Barcas",
+  "Deo Gloria",
+  "Novai",
+  "Asteroid Belt Area 1",
+  "Asteroid Belt Area 2",
+  "Asteroid Belt Area 3",
+  "Asteroid Belt Area 4",
+  "Scipios",
+];
+
 const ArmedForces = ({ onBack, nationName, dbLoaded }) => {
   if (!dbLoaded) {
     return (
@@ -107,10 +154,6 @@ const ArmedForces = ({ onBack, nationName, dbLoaded }) => {
           );
           setVehicleAssets(totals);
 
-          // Get available worlds
-          const worlds = await databaseService.getAvailableWorlds(
-            "The Solar Wars"
-          );
           setAvailableWorlds(worlds);
         } else {
           // Faction doesn't exist, show placeholder data

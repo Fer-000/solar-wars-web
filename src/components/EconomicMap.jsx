@@ -361,7 +361,7 @@ const EconomicMap = ({ nationName, onHexesUpdate }) => {
                           alert(`Upgrade ${b.name} (not implemented)`)
                         }
                       >
-                        Upgrade
+                        ↑
                       </button>
                       <button
                         style={{
@@ -378,7 +378,7 @@ const EconomicMap = ({ nationName, onHexesUpdate }) => {
                           alert(`Downgrade ${b.name} (not implemented)`)
                         }
                       >
-                        Downgrade
+                        ↓
                       </button>
                       <button
                         style={{
@@ -462,84 +462,10 @@ const EconomicMap = ({ nationName, onHexesUpdate }) => {
                     </div>
                     <div className="world-info">
                       <div className="world-fleets-count">
-                        {world.hexes} hexes • {world.totalUnits} units
+                        {world.hexes} hexes
                         {world.totalFleets > 0 &&
                           ` • ${world.totalFleets} fleets`}
                       </div>
-                      {/* Display buildings for this world */}
-                      {(() => {
-                        const worldBuildings = formatWorldBuildings(
-                          world.buildings,
-                          buildingDefs
-                        );
-                        console.log(
-                          "Overview world:",
-                          world.name,
-                          "Raw:",
-                          world.buildings,
-                          "Defs:",
-                          buildingDefs,
-                          "Formatted:",
-                          worldBuildings
-                        );
-
-                        if (worldBuildings.length > 0) {
-                          return (
-                            <div
-                              style={{ marginTop: "8px", fontSize: "0.9em" }}
-                            >
-                              <strong style={{ color: "#00f5ff" }}>
-                                Buildings:
-                              </strong>
-                              <ul
-                                style={{ margin: "4px 0 0 16px", padding: 0 }}
-                              >
-                                {worldBuildings.slice(0, 3).map((b, idx) => (
-                                  <li
-                                    key={`${b.name}-${b.level}-${idx}`}
-                                    style={{
-                                      color: "#ccc",
-                                      fontSize: "0.85em",
-                                      listStyle: "none",
-                                      marginBottom: "2px",
-                                    }}
-                                  >
-                                    • {b.name} Lvl {b.level} x{b.amount}
-                                  </li>
-                                ))}
-                                {worldBuildings.length > 3 && (
-                                  <li
-                                    style={{
-                                      color: "#888",
-                                      fontSize: "0.8em",
-                                      listStyle: "none",
-                                    }}
-                                  >
-                                    • +{worldBuildings.length - 3} more...
-                                  </li>
-                                )}
-                              </ul>
-                            </div>
-                          );
-                        } else if (
-                          world.buildings &&
-                          world.buildings.length > 0
-                        ) {
-                          // Show debug info if buildings exist but aren't formatted properly
-                          return (
-                            <div
-                              style={{
-                                marginTop: "8px",
-                                fontSize: "0.8em",
-                                color: "#888",
-                              }}
-                            >
-                              Buildings: {world.buildings.length} entries
-                            </div>
-                          );
-                        }
-                        return null;
-                      })()}
                     </div>
                   </div>
                 ))}

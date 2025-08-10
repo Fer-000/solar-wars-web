@@ -24,6 +24,8 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
   const [zoomedWorld, setZoomedWorld] = useState(null); // { name, animate }
   const [collapsedFactions, setCollapsedFactions] = useState(new Set());
   const [scrollPosition, setScrollPosition] = useState(0);
+  const [battleResult, setBattleResult] = useState(null);
+  const [selectedPlayerFleetId, setSelectedPlayerFleetId] = useState(null);
 
   const solarSystems = {
     Sol: [
@@ -67,10 +69,10 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
       "Barcas",
       "Deo Gloria",
       "Novai",
-      "Asteroid Belt Area A",
-      "Asteroid Belt Area B",
-      "Asteroid Belt Area C",
-      "Asteroid Belt Area D",
+      "Asteroid Belt Area 1",
+      "Asteroid Belt Area 2",
+      "Asteroid Belt Area 3",
+      "Asteroid Belt Area 4",
       "Scipios",
     ],
   };
@@ -194,6 +196,32 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
     setSelectedFleet(null);
   };
 
+  useEffect(() => {
+    if (
+      showFleetModal &&
+      selectedFleet &&
+      selectedFleet.factionName === "pirates"
+    ) {
+      // Find all player fleets at this location
+      const playerFleets =
+        Array.isArray(systemData[currentFaction.toLowerCase()]) &&
+        selectedFleet?.State?.Location
+          ? systemData[currentFaction.toLowerCase()].filter(
+              (fleet) =>
+                fleet.State?.Location === selectedFleet.State.Location &&
+                fleet.Vehicles &&
+                fleet.Vehicles.reduce((sum, v) => sum + (v.count || 0), 0) > 0
+            )
+          : [];
+      setSelectedPlayerFleetId(
+        playerFleets.length > 0 ? playerFleets[0].ID : null
+      );
+    } else {
+      setSelectedPlayerFleetId(null);
+    }
+    // eslint-disable-next-line
+  }, [showFleetModal, selectedFleet, systemData, currentFaction]);
+
   const getFleetIcon = (fleet) => {
     // Determine if space or ground fleet
     const isGroundFleet =
@@ -212,7 +240,7 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
           );
         }));
 
-    return isGroundFleet ? "↓" : "↑ ";
+    return isGroundFleet ? "↓" : "↑";
   };
 
   const getFactionColor = (factionName) => {
@@ -262,6 +290,319 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
       }
     }, 0);
   };
+
+  const maxPirateFleetsPerSystem = 10;
+  const pirateFleetLevels = [
+    {
+      name: "Pirate Raiders",
+      min: 1,
+      max: 3,
+      minLength: 0,
+      maxLength: 60,
+    },
+    {
+      name: "Pirate Squadron",
+      min: 4,
+      max: 8,
+      minLength: 0,
+      maxLength: 120,
+    },
+    {
+      name: "Pirate Flotilla",
+      min: 9,
+      max: 18,
+      minLength: 0,
+      maxLength: 200,
+    },
+    {
+      name: "Pirate Fleet",
+      min: 19,
+      max: 40,
+      minLength: 0,
+      maxLength: 400,
+    },
+    {
+      name: "Pirate Armada",
+      min: 50,
+      max: 80,
+      minLength: 0,
+      maxLength: 9999,
+    },
+  ];
+
+  const pirateSpawnWorlds = (systemName) =>
+    solarSystems[systemName].filter(
+      (w) =>
+        w.toLowerCase().replace(/\s+/g, "").includes("asteroidbelt") ||
+        w.toLowerCase() === "ceres"
+    );
+
+  // Helper to get random vehicles for pirates, weighted by level
+  function getRandomPirateVehicles(pirateFaction, levelIdx) {
+    if (!pirateFaction?.Vehicles) return [];
+    const level = pirateFleetLevels[levelIdx];
+    // Filter vehicles by length for this level
+    const eligible = pirateFaction.Vehicles.filter((v) => {
+      const len = v.data?.length || v.length || 0;
+      return len >= (level.minLength || 0) && len <= (level.maxLength || 9999);
+    });
+    // Sort by length ascending
+    eligible.sort(
+      (a, b) =>
+        (a.data?.length || a.length || 0) - (b.data?.length || b.length || 0)
+    );
+    // For higher levels, allow more large ships
+    let numShips =
+      Math.floor(Math.random() * (level.max - level.min + 1)) + level.min;
+    let ships = [];
+    let remaining = numShips;
+    // Distribute: lower levels get mostly small ships, higher levels get more big ships
+    for (let i = eligible.length - 1; i >= 0 && remaining > 0; i--) {
+      // For level 1, only 0-1 of the largest ship, for level 5, allow more
+      let maxThisType = Math.max(
+        1,
+        Math.floor((levelIdx + 1) * 0.5 * (eligible.length - i))
+      );
+      let count = Math.min(
+        remaining,
+        Math.floor(Math.random() * maxThisType) + 1
+      );
+      if (count > 0) {
+        ships.push({ ID: eligible[i].ID, count });
+        remaining -= count;
+      }
+    }
+    // If still remaining, fill with smallest ships
+    if (remaining > 0 && eligible.length > 0) {
+      ships.push({ ID: eligible[0].ID, count: remaining });
+    }
+    return ships;
+  }
+
+  async function generateAndPersistPirateFleets() {
+    if (!dbLoaded || !Object.keys(allFactions).length) return;
+    const pirateFaction = allFactions["pirates"];
+    if (!pirateFaction) return;
+
+    const newFactions = { ...allFactions };
+    let changed = false;
+    let fleetsGenerated = 0;
+
+    Object.keys(solarSystems).forEach((systemName) => {
+      const pirateWorlds = pirateSpawnWorlds(systemName);
+      const pirateFleets =
+        pirateFaction.Fleets?.filter((fleet) =>
+          pirateWorlds.includes(fleet.State?.Location)
+        ) || [];
+      const currentCount = pirateFleets.length;
+
+      if (currentCount < maxPirateFleetsPerSystem) {
+        // Chance to spawn decreases as fleet count increases
+        const spawnChance =
+          (maxPirateFleetsPerSystem - currentCount) / maxPirateFleetsPerSystem;
+        if (Math.random() < spawnChance) {
+          // Weighted random for fleet level (higher levels less likely)
+          const levelWeights = [0.3, 0.25, 0.2, 0.15, 0.1];
+          const r = Math.random();
+          let levelIdx = 0,
+            acc = 0;
+          for (let i = 0; i < levelWeights.length; i++) {
+            acc += levelWeights[i];
+            if (r < acc) {
+              levelIdx = i;
+              break;
+            }
+          }
+          const level = pirateFleetLevels[levelIdx];
+          const world =
+            pirateWorlds[Math.floor(Math.random() * pirateWorlds.length)];
+          const newFleet = {
+            ID:
+              "pirate-" + Date.now() + "-" + Math.floor(Math.random() * 10000),
+            Name: level.name,
+            Type: "Space",
+            State: {
+              Location: world,
+              Action: "Patrolling", // <-- set to Patrolling
+            },
+            Vehicles: getRandomPirateVehicles(pirateFaction, levelIdx),
+            Value: { CM: 0, CS: 0, EL: 0, ER: 0 },
+            CSCost: 0,
+          };
+          if (!newFactions["pirates"].Fleets)
+            newFactions["pirates"].Fleets = [];
+          newFactions["pirates"].Fleets.push(newFleet);
+          changed = true;
+          fleetsGenerated++;
+          console.log(
+            `[PirateGen] Generated ${level.name} at ${world} in ${systemName}:`,
+            newFleet
+          );
+        } else {
+          console.log(
+            `[PirateGen] No fleet spawned in ${systemName} (current: ${currentCount}, chance: ${(
+              spawnChance * 100
+            ).toFixed(1)}%)`
+          );
+        }
+      }
+    });
+
+    if (changed) {
+      await databaseService.updateFleets(
+        "The Solar Wars",
+        "pirates",
+        newFactions["pirates"].Fleets
+      );
+      const factions = await databaseService.getFactions("The Solar Wars");
+      setAllFactions(factions);
+      console.log(
+        `[PirateGen] Total new pirate fleets generated: ${fleetsGenerated}`
+      );
+    } else {
+      console.log(
+        "[PirateGen] No new pirate fleets generated (already at max or chance failed)."
+      );
+    }
+  }
+
+  useEffect(() => {
+    if (dbLoaded && Object.keys(allFactions).length > 0) {
+      console.log(
+        "[PirateGen] useEffect triggered, dbLoaded:",
+        dbLoaded,
+        "allFactions loaded:",
+        Object.keys(allFactions)
+      );
+      generateAndPersistPirateFleets();
+    }
+    // eslint-disable-next-line
+  }, [dbLoaded, allFactions]);
+
+  async function handleEngagePirates(playerFleet, pirateFleet) {
+    // Get vehicle stats for both fleets
+    const getFleetPower = (fleet, faction) => {
+      if (!fleet.Vehicles || !faction?.Vehicles) return 0;
+      return fleet.Vehicles.reduce((sum, v) => {
+        const vDef = faction.Vehicles.find((def) => def.ID === v.ID);
+        if (!vDef || !vDef.data) return sum;
+        const d = vDef.data;
+        const power =
+          (d.main || 0) +
+          (d.lances || 0) +
+          (d.pdc || 0) +
+          (d.torpedoes || 0) +
+          (d.shield ? 20 : 0) +
+          (d.length || 0) / 10;
+        return sum + power * (v.count || 1);
+      }, 0);
+    };
+
+    const playerFaction = allFactions[currentFaction.toLowerCase()];
+    console.log("Player faction:", playerFaction);
+    const pirateFaction = allFactions["pirates"];
+    const playerPower = getFleetPower(playerFleet, playerFaction);
+    const piratePower = getFleetPower(pirateFleet, pirateFaction);
+
+    let playerWins = playerPower >= piratePower * (0.8 + Math.random() * 0.4);
+    let resourceReward = {
+      "U-CM": 0,
+      "U-EL": 0,
+      "U-CS": 0,
+      CM: 0,
+      EL: 0,
+      CS: 0,
+      ER: 0,
+    };
+    let playerLosses = [];
+    let pirateLosses = [];
+
+    if (playerWins) {
+      // Player wins: destroy pirate fleet, reward, lose a few ships
+      resourceReward = {
+        "U-CM": Math.floor(10 + Math.random() * 10),
+        "U-EL": Math.floor(10 + Math.random() * 10),
+        "U-CS": Math.floor(10 + Math.random() * 10),
+        CM: Math.floor(100 + Math.random() * 100),
+        EL: Math.floor(100 + Math.random() * 100),
+        CS: Math.floor(100 + Math.random() * 100),
+        ER: Math.floor(20 + Math.random() * 20),
+      };
+      // Remove pirate fleet
+      const newPirateFleets = pirateFaction.Fleets.filter(
+        (f) => f.ID !== pirateFleet.ID
+      );
+      await databaseService.updateFleets(
+        "The Solar Wars",
+        "pirates",
+        newPirateFleets
+      );
+      // Remove a few ships from player fleet
+      const newPlayerFleet = { ...playerFleet };
+      newPlayerFleet.Vehicles = newPlayerFleet.Vehicles.map((v) => {
+        const loss = Math.floor(Math.random() * 2);
+        playerLosses.push({ ID: v.ID, lost: loss });
+        return { ...v, count: Math.max(0, v.count - loss) };
+      });
+      // Update player fleet in DB
+      const newPlayerFleets = playerFaction.Fleets.map((f) =>
+        f.ID === playerFleet.ID ? newPlayerFleet : f
+      );
+      await databaseService.updateFleets(
+        "The Solar Wars",
+        currentFaction,
+        newPlayerFleets
+      );
+      pirateLosses = pirateFleet.Vehicles.map((v) => ({
+        ID: v.ID,
+        lost: v.count,
+      }));
+    } else {
+      // Player loses: heavy losses, pirates may lose some too
+      // Remove many ships from player fleet
+      const newPlayerFleet = { ...playerFleet };
+      newPlayerFleet.Vehicles = newPlayerFleet.Vehicles.map((v) => {
+        const loss = Math.floor(v.count * (0.5 + Math.random() * 0.4));
+        playerLosses.push({ ID: v.ID, lost: loss });
+        return { ...v, count: Math.max(0, v.count - loss) };
+      });
+      // Remove some ships from pirates
+      const newPirateFleet = { ...pirateFleet };
+      newPirateFleet.Vehicles = newPirateFleet.Vehicles.map((v) => {
+        const loss = Math.floor(v.count * (0.2 + Math.random() * 0.3));
+        pirateLosses.push({ ID: v.ID, lost: loss });
+        return { ...v, count: Math.max(0, v.count - loss) };
+      });
+      // Update both fleets in DB
+      const newPlayerFleets = playerFaction.Fleets.map((f) =>
+        f.ID === playerFleet.ID ? newPlayerFleet : f
+      );
+      const newPirateFleets = pirateFaction.Fleets.map((f) =>
+        f.ID === pirateFleet.ID ? newPirateFleet : f
+      );
+      await databaseService.updateFleets(
+        "The Solar Wars",
+        currentFaction,
+        newPlayerFleets
+      );
+      await databaseService.updateFleets(
+        "The Solar Wars",
+        "pirates",
+        newPirateFleets
+      );
+    }
+
+    await loadAllFactionsData();
+    setBattleResult({
+      win: playerWins,
+      playerLosses,
+      pirateLosses,
+      resourceReward,
+      playerFleet,
+      pirateFleet,
+    });
+    setShowFleetModal(false);
+  }
 
   return (
     <div className="tactical-map-overlay">
@@ -1019,6 +1360,173 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
                       Collapse Nation
                     </button>
                   </div>
+                )}
+
+                {selectedFleet.factionName === "pirates" &&
+                  (() => {
+                    // Find all player fleets at this location
+                    const playerFleets =
+                      Array.isArray(systemData[currentFaction.toLowerCase()]) &&
+                      selectedFleet?.State?.Location
+                        ? systemData[currentFaction.toLowerCase()].filter(
+                            (fleet) =>
+                              fleet.State?.Location ===
+                                selectedFleet.State.Location &&
+                              fleet.Vehicles &&
+                              fleet.Vehicles.reduce(
+                                (sum, v) => sum + (v.count || 0),
+                                0
+                              ) > 0
+                          )
+                        : [];
+                    // --- PATCH: If only one fleet and not set, set selectedPlayerFleetId ---
+
+                    if (playerFleets.length === 0) return null;
+                    return (
+                      <div style={{ marginTop: "16px", textAlign: "center" }}>
+                        <div style={{ marginBottom: "8px" }}>
+                          <label>
+                            <strong>Select your fleet to engage:</strong>
+                            <select
+                              style={{ marginLeft: "8px", padding: "4px" }}
+                              value={
+                                selectedPlayerFleetId ||
+                                (playerFleets.length === 1
+                                  ? playerFleets[0].ID
+                                  : "")
+                              }
+                              onChange={(e) =>
+                                setSelectedPlayerFleetId(e.target.value)
+                              }
+                            >
+                              {playerFleets.map((fleet) => (
+                                <option key={fleet.ID} value={fleet.ID}>
+                                  {fleet.Name || `Fleet ${fleet.ID}`} (
+                                  {fleet.Vehicles.reduce(
+                                    (sum, v) => sum + (v.count || 0),
+                                    0
+                                  )}{" "}
+                                  ships)
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            const fleetId =
+                              selectedPlayerFleetId ||
+                              (playerFleets.length === 1
+                                ? playerFleets[0].ID
+                                : null);
+                            const playerFleet = playerFleets.find(
+                              (f) => f.ID === fleetId
+                            );
+                            if (playerFleet) {
+                              console.log(
+                                "Engaging pirates with fleet:",
+                                playerFleet
+                              );
+                              console.log("Selected fleet:", selectedFleet);
+                              await handleEngagePirates(
+                                playerFleet,
+                                selectedFleet
+                              );
+                            }
+                          }}
+                          style={{
+                            padding: "8px 16px",
+                            backgroundColor: "#b00",
+                            color: "white",
+                            border: "1px solid #800",
+                            borderRadius: "4px",
+                            cursor:
+                              selectedPlayerFleetId ||
+                              (playerFleets.length === 1
+                                ? "pointer"
+                                : "not-allowed"),
+                            fontSize: "14px",
+                            opacity:
+                              selectedPlayerFleetId || playerFleets.length === 1
+                                ? 1
+                                : 0.6,
+                          }}
+                          disabled={
+                            //!selectedPlayerFleetId && playerFleets.length !== 1
+                            true
+                          }
+                        >
+                          Engage Pirates DON'T USE
+                        </button>
+                        <br />
+                        you'll lose ships without any gain
+                      </div>
+                    );
+                  })()}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Battle Result Modal */}
+        {battleResult && (
+          <div
+            className="fleet-modal-overlay"
+            onClick={() => setBattleResult(null)}
+          >
+            <div className="fleet-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="fleet-modal-header">
+                <h3>{battleResult.win ? "Victory!" : "Defeat!"}</h3>
+                <button
+                  className="close-btn"
+                  onClick={() => setBattleResult(null)}
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="fleet-modal-content">
+                <h4>Your Losses:</h4>
+                <ul>
+                  {battleResult.playerLosses.map((loss) => {
+                    const vDef = allFactions[currentFaction]?.Vehicles?.find(
+                      (v) => v.ID === loss.ID
+                    );
+                    if (!loss.lost) return null;
+                    return (
+                      <li key={loss.ID}>
+                        {vDef?.name || `Ship ${loss.ID}`}: -{loss.lost}
+                      </li>
+                    );
+                  })}
+                </ul>
+                <h4>Pirate Losses:</h4>
+                <ul>
+                  {battleResult.pirateLosses.map((loss) => {
+                    const vDef = allFactions["pirates"]?.Vehicles?.find(
+                      (v) => v.ID === loss.ID
+                    );
+                    if (!loss.lost) return null;
+                    return (
+                      <li key={loss.ID}>
+                        {vDef?.name || `Ship ${loss.ID}`}: -{loss.lost}
+                      </li>
+                    );
+                  })}
+                </ul>
+                {battleResult.win && (
+                  <>
+                    <h4>Resource Reward:</h4>
+                    <ul>
+                      {Object.entries(battleResult.resourceReward).map(
+                        ([k, v]) =>
+                          v > 0 ? (
+                            <li key={k}>
+                              {k}: +{v}
+                            </li>
+                          ) : null
+                      )}
+                    </ul>
+                  </>
                 )}
               </div>
             </div>
