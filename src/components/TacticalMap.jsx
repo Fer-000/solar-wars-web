@@ -33,6 +33,10 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
       "Earth",
       "Luna",
       "Mars",
+      "Ceres",
+      "Asteroid Belt Area A",
+      "Asteroid Belt Area B",
+      "Asteroid Belt Area C",
       "Jupiter",
       "Io",
       "Europa",
@@ -59,7 +63,16 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
       "Pluto",
       "Charon",
     ],
-    Corelli: ["Barcas", "Deo Gloria", "Novai", "Scipios"],
+    Corelli: [
+      "Barcas",
+      "Deo Gloria",
+      "Novai",
+      "Asteroid Belt Area A",
+      "Asteroid Belt Area B",
+      "Asteroid Belt Area C",
+      "Asteroid Belt Area D",
+      "Scipios",
+    ],
   };
   // Cache planet image error states to avoid rerendering and lag
   const planetImageErrorCache = React.useRef({});
@@ -262,7 +275,16 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
 
         {/* Zoomed-in planet view */}
         {zoomedWorld ? (
-          <div className="zoomed-planet-area">
+          <div
+            className="zoomed-planet-area"
+            style={{
+              display: "flex",
+              flexDirection: "row",
+              minHeight: "400px",
+              overflow: "hidden",
+              position: "relative",
+            }}
+          >
             {/* Left: Buildings info, scroll bar on left, button at top */}
             <div
               style={{
@@ -272,7 +294,9 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
                 position: "relative",
               }}
             >
-              <button onClick={handleBackToMap}>← Back to Map</button>
+              <button onClick={() => setZoomedWorld(null)}>
+                ← Back to Map
+              </button>
               <h3 style={{ marginBottom: "16px", marginTop: "48px" }}>
                 {zoomedWorld.name} - Buildings
               </h3>
@@ -928,6 +952,14 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
                                         <span className="vehicle-name">
                                           {vehicleData?.name ||
                                             `Vehicle ${vehicle.ID}`}
+                                          {(() => {
+                                            const length =
+                                              vehicleData?.data?.length;
+                                            console.log(length);
+                                            return length
+                                              ? ` (${length}m)`
+                                              : " (error)";
+                                          })()}
                                         </span>
                                         <span className="">
                                           {vehicle.count || 0}

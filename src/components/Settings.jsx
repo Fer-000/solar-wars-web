@@ -162,7 +162,7 @@ const Settings = ({ onBack, userSettings = {}, onSettingsChange }) => {
               <label>Inspired by Proxy's SW Rater website</label>
             </div>
             <div className="setting-option">
-              <label>v0.4.3w</label>
+              <label>v0.4.6w</label>
             </div>
           </div>
         </div>

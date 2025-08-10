@@ -6,7 +6,7 @@ import globalDB from "../services/GlobalDB";
 import "./CenterPage.css";
 import "./ArmedForces.css";
 
-const ArmedForces = ({ onBack, nationName = "athena", dbLoaded }) => {
+const ArmedForces = ({ onBack, nationName, dbLoaded }) => {
   if (!dbLoaded) {
     return (
       <div className="armed-forces">
@@ -699,7 +699,9 @@ const ArmedForces = ({ onBack, nationName = "athena", dbLoaded }) => {
                       <div className="unit-header">
                         <h4>{unit.name}</h4>
                         <span
-                          className={`unit-status ${unit.state.toLowerCase()}`}
+                          className={`unit-status ${
+                            unit.state ? unit.state.toLowerCase() : ""
+                          }`}
                         >
                           {unit.state}
                         </span>
@@ -708,33 +710,13 @@ const ArmedForces = ({ onBack, nationName = "athena", dbLoaded }) => {
                         <span>
                           {unit.vehicleLabel}:{" "}
                           {(() => {
-                            // If fleet is in Attack mode, reveal stealth ships
-                            if (
-                              unit.state === "Attack" &&
-                              unit.vehicles &&
-                              allVehicles.length > 0
-                            ) {
-                              // Count all vehicles, including stealth
+                            // Always show all ships, including stealth
+                            if (unit.vehicles && allVehicles.length > 0) {
                               return unit.vehicles.reduce(
                                 (sum, v) => sum + v.count,
                                 0
                               );
-                            } else if (
-                              unit.vehicles &&
-                              allVehicles.length > 0
-                            ) {
-                              // Hide stealth ships unless in Attack mode
-                              return unit.vehicles.reduce((sum, v) => {
-                                const vehicleData = allVehicles.find(
-                                  (av) => av.ID === v.ID
-                                );
-                                const isStealth =
-                                  vehicleData?.stealth ||
-                                  vehicleData?.data?.stealth;
-                                return isStealth ? sum : sum + v.count;
-                              }, 0);
                             } else {
-                              // Fallback
                               return unit.ships;
                             }
                           })()}
