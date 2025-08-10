@@ -218,6 +218,7 @@ class DatabaseService {
       name: factionId,
       population: faction.Resources?.Population || 0,
       territory: territory,
+      buildings: faction.Buildings || 0,
       resources: faction.Resources || {},
       fleets: faction.Fleets || [],
       vehicles: faction.Vehicles || [],
