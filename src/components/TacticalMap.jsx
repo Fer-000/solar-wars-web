@@ -3,7 +3,8 @@ import databaseService from "../services/database";
 import globalDB from "../services/GlobalDB";
 import "./TacticalMap.css";
 
-const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
+// Add refereeMode prop to component
+const TacticalMap = ({ onClose, currentFaction, dbLoaded, refereeMode }) => {
   if (!dbLoaded) {
     return (
       <div className="tactical-map-overlay">
@@ -168,9 +169,42 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
 
       for (const [factionName, factionData] of Object.entries(allFactions)) {
         if (factionData.Fleets) {
-          const fleetsInSystem = factionData.Fleets.filter((fleet) =>
+          let fleetsInSystem = factionData.Fleets.filter((fleet) =>
             worlds.includes(fleet.State?.Location)
           );
+
+          // Apply referee filtering
+          if (refereeMode?.isReferee) {
+            const { nations, worlds: refWorlds } = refereeMode;
+
+            if (refWorlds.length > 0 && nations.length === 0) {
+              // Show all nations but only in specified worlds
+              fleetsInSystem = fleetsInSystem.filter((fleet) =>
+                refWorlds.includes(fleet.State?.Location)
+              );
+            } else if (nations.length > 0 && refWorlds.length === 0) {
+              // Show only specified nations in all worlds
+              if (!nations.includes(factionName.toLowerCase())) {
+                fleetsInSystem = [];
+              }
+            } else if (nations.length > 0 && refWorlds.length > 0) {
+              // Show specified nations everywhere + all nations on specified worlds
+              const isSpecifiedNation = nations.includes(
+                factionName.toLowerCase()
+              );
+              const fleetsOnSpecifiedWorlds = fleetsInSystem.filter((fleet) =>
+                refWorlds.includes(fleet.State?.Location)
+              );
+
+              if (isSpecifiedNation) {
+                // Show this nation's fleets everywhere in the system
+                // fleetsInSystem already contains all fleets in the system
+              } else {
+                // Show this nation's fleets only on specified worlds
+                fleetsInSystem = fleetsOnSpecifiedWorlds;
+              }
+            }
+          }
 
           if (fleetsInSystem.length > 0) {
             systemFleets[factionName] = fleetsInSystem;
@@ -608,7 +642,20 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
     <div className="tactical-map-overlay">
       <div className="tactical-map-container">
         <div className="tactical-map-header">
-          <h2>🗺️ Tactical Map</h2>
+          <h2>
+            🗺️ Tactical Map
+            {refereeMode?.isReferee && (
+              <span
+                style={{
+                  color: "#ff6b6b",
+                  marginLeft: "8px",
+                  fontSize: "14px",
+                }}
+              >
+                (REFEREE MODE)
+              </span>
+            )}
+          </h2>
           <button className="close-btn" onClick={onClose}>
             ✕
           </button>
@@ -654,6 +701,38 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
                     const factionsWithBuildings = Object.entries(
                       allFactions
                     ).filter(([factionName, factionData]) => {
+                      // Apply referee filtering for buildings view
+                      if (refereeMode?.isReferee) {
+                        const { nations, worlds: refWorlds } = refereeMode;
+
+                        if (refWorlds.length > 0 && nations.length === 0) {
+                          // Show all nations but only on specified worlds
+                          if (!refWorlds.includes(zoomedWorld.name)) {
+                            return false;
+                          }
+                        } else if (
+                          nations.length > 0 &&
+                          refWorlds.length === 0
+                        ) {
+                          // Show only specified nations on all worlds
+                          if (!nations.includes(factionName.toLowerCase())) {
+                            return false;
+                          }
+                        } else if (nations.length > 0 && refWorlds.length > 0) {
+                          // Show specified nations on all worlds + all nations on specified worlds
+                          const isSpecifiedNation = nations.includes(
+                            factionName.toLowerCase()
+                          );
+                          const isSpecifiedWorld = refWorlds.includes(
+                            zoomedWorld.name
+                          );
+
+                          if (!isSpecifiedNation && !isSpecifiedWorld) {
+                            return false;
+                          }
+                        }
+                      }
+
                       const buildingsArr =
                         factionData?.Maps?.[zoomedWorld.name]?.Buildings;
                       // Only include if there is at least one building with nonzero amount
@@ -901,9 +980,12 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
                     );
 
                   // Only show fleet pointers if current faction has fleets with ships > 0
-                  const currentFactionHasValidFleetHere =
-                    currentFactionFleetsWithShips.length > 0;
-                  const visibleFleets = currentFactionHasValidFleetHere
+                  const currentFactionHasValidFleetHere = refereeMode?.isReferee
+                    ? fleetsAtWorld.length > 0 // Referee can see all fleets
+                    : currentFactionFleetsWithShips.length > 0;
+                  const visibleFleets = refereeMode?.isReferee
+                    ? fleetsAtWorld // Referee sees all fleets
+                    : currentFactionHasValidFleetHere
                     ? fleetsAtWorld
                     : fleetsAtWorld.filter(
                         (fleet) =>
@@ -980,8 +1062,10 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
                         }))
                   );
 
-                  // --- PATCH: Make planet image clickable if current faction has active combat units ---
-                  const canZoomIn = currentFactionActiveCombatUnits.length > 0;
+                  // --- PATCH: Make planet image clickable if current faction has active combat units OR referee mode ---
+                  const canZoomIn =
+                    refereeMode?.isReferee ||
+                    currentFactionActiveCombatUnits.length > 0;
 
                   return (
                     <div key={worldName} className="world-container">
@@ -1247,29 +1331,33 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded }) => {
                           );
                         const hasActiveUnit =
                           currentFactionActiveCombatUnits.length > 0;
-                        if (isCurrentFaction || hasActiveUnit) {
-                          // For enemy fleets, show composition but hide stealth ships unless fleet is attacking
-                          const visibleVehicles = selectedFleet.Vehicles.filter(
-                            (vehicle) => {
-                              if (isCurrentFaction) return true;
-                              const factionVehicles =
-                                allFactions[selectedFleet.factionName]
-                                  ?.Vehicles || [];
-                              const vehicleRecord = factionVehicles.find(
-                                (v) => v.ID === vehicle.ID
-                              );
-                              const isStealth =
-                                vehicleRecord?.stealth === true ||
-                                vehicleRecord?.data?.stealth === true;
-                              if (
-                                isStealth &&
-                                selectedFleet.State?.Action !== "Battle"
-                              ) {
-                                return false;
-                              }
-                              return true;
-                            }
-                          );
+                        if (
+                          isCurrentFaction ||
+                          hasActiveUnit ||
+                          refereeMode?.isReferee
+                        ) {
+                          // For referee mode, show all vehicles without stealth filtering
+                          const visibleVehicles = refereeMode?.isReferee
+                            ? selectedFleet.Vehicles // Referee sees everything
+                            : selectedFleet.Vehicles.filter((vehicle) => {
+                                if (isCurrentFaction) return true;
+                                const factionVehicles =
+                                  allFactions[selectedFleet.factionName]
+                                    ?.Vehicles || [];
+                                const vehicleRecord = factionVehicles.find(
+                                  (v) => v.ID === vehicle.ID
+                                );
+                                const isStealth =
+                                  vehicleRecord?.stealth === true ||
+                                  vehicleRecord?.data?.stealth === true;
+                                if (
+                                  isStealth &&
+                                  selectedFleet.State?.Action !== "Battle"
+                                ) {
+                                  return false;
+                                }
+                                return true;
+                              });
                           return (
                             <>
                               <div
