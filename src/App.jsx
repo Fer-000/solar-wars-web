@@ -5,6 +5,7 @@ import Settings from "./components/Settings";
 import Economy from "./components/Economy";
 import Shipyards from "./components/Shipyards";
 import ArmedForces from "./components/ArmedForces";
+import TacticalMap from "./components/TacticalMap";
 import HeaderMenu from "./components/HeaderMenu";
 import databaseService from "./services/database";
 import globalDB from "./services/GlobalDB";
@@ -20,6 +21,11 @@ function App() {
   });
   const [dbLoaded, setDbLoaded] = useState(globalDB.isLoaded());
   const [loadingDb, setLoadingDb] = useState(false);
+  const [refereeMode, setRefereeMode] = useState({
+    isReferee: false,
+    nations: [],
+    worlds: [],
+  });
 
   // Check if DB is already cached on app load
   useEffect(() => {
@@ -46,37 +52,28 @@ function App() {
     }
   };
 
-  const handleEnter = async (id) => {
-    // Only fetch if not already cached
-    if (!globalDB.isLoaded()) {
+  const handleEnter = async (faction, refereeData = null) => {
+    if (faction === "referee") {
+      // Set referee mode and open tactical map
+      setRefereeMode({
+        isReferee: true,
+        nations: refereeData.nations,
+        worlds: refereeData.worlds,
+      });
+      setNationId("referee");
+      setCurrentView("tactical-map");
+      return;
+    }
+
+    // Normal faction login
+    setRefereeMode({ isReferee: false, nations: [], worlds: [] });
+    setNationId(faction);
+    setCurrentView("dashboard");
+
+    // Cache DB if not already loaded
+    if (!dbLoaded) {
       await fetchAndCacheDB();
     }
-    setNationId(id);
-
-    // Set factionId and load faction data from database
-    setUserSettings((prev) => ({
-      ...prev,
-      factionId: id,
-      nationName: prev.nationName || id,
-    }));
-
-    // Load faction data from database to get proper name, leader, and color
-    try {
-      const faction = await databaseService.getFaction("The Solar Wars", id);
-      if (faction) {
-        setUserSettings((prev) => ({
-          ...prev,
-          factionId: id,
-          treatment: faction.leader || prev.treatment,
-          nationName: faction.name || prev.nationName || id,
-          themeColor: faction.color || prev.themeColor,
-        }));
-      }
-    } catch (error) {
-      console.error("Error loading faction data on login:", error);
-    }
-
-    setCurrentView("dashboard");
   };
 
   const handleNavigation = (section) => {
@@ -94,6 +91,7 @@ function App() {
   const handleBackToHome = async () => {
     setCurrentView("home");
     setNationId("");
+    setRefereeMode({ isReferee: false, nations: [], worlds: [] });
     // Optionally refresh cache when returning to homepage
     await fetchAndCacheDB();
   };
@@ -102,12 +100,33 @@ function App() {
     setCurrentView("dashboard");
   };
 
+  const handleTacticalMapClose = () => {
+    if (refereeMode.isReferee) {
+      // For referee, go back to homepage
+      handleBackToHome();
+    } else {
+      // For normal users, go back to dashboard
+      handleBackToDashboard();
+    }
+  };
+
   if (currentView === "home") {
     return (
       <HomePage
         onEnter={handleEnter}
         loadingDb={loadingDb}
         dbLoaded={dbLoaded}
+      />
+    );
+  }
+
+  if (currentView === "tactical-map") {
+    return (
+      <TacticalMap
+        onClose={handleTacticalMapClose}
+        currentFaction={nationId}
+        dbLoaded={dbLoaded}
+        refereeMode={refereeMode}
       />
     );
   }
