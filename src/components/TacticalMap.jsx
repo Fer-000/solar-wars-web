@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import databaseService from "../services/database";
 import globalDB from "../services/GlobalDB";
 import "./TacticalMap.css";
@@ -27,6 +27,11 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded, refereeMode }) => {
   const [scrollPosition, setScrollPosition] = useState(0);
   const [battleResult, setBattleResult] = useState(null);
   const [selectedPlayerFleetId, setSelectedPlayerFleetId] = useState(null);
+
+  // --- PATCH: Add scroll preservation ---
+  const mapScrollRef = useRef(null);
+  const savedScrollRef = useRef(0);
+  // --- End scroll preservation patch ---
 
   const solarSystems = {
     Sol: [
@@ -220,15 +225,31 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded, refereeMode }) => {
     }
   };
 
+  // Helper to open fleet modal and save scroll position
   const openFleetModal = (fleet, factionName) => {
+    if (mapScrollRef.current) {
+      savedScrollRef.current = mapScrollRef.current.scrollTop;
+    }
     setSelectedFleet({ ...fleet, factionName });
     setShowFleetModal(true);
   };
 
+  // Helper to close fleet modal
   const closeFleetModal = () => {
     setShowFleetModal(false);
     setSelectedFleet(null);
   };
+
+  // Restore scroll position when modal closes
+  useEffect(() => {
+    if (!showFleetModal && mapScrollRef.current) {
+      requestAnimationFrame(() => {
+        if (mapScrollRef.current) {
+          mapScrollRef.current.scrollTop = savedScrollRef.current;
+        }
+      });
+    }
+  }, [showFleetModal]);
 
   useEffect(() => {
     if (
@@ -937,7 +958,11 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded, refereeMode }) => {
             {loading ? (
               <div className="loading-system">Loading system data...</div>
             ) : (
-              <div className="worlds-grid" style={{ paddingBottom: "48px" }}>
+              <div
+                className="worlds-grid"
+                ref={mapScrollRef}
+                style={{ paddingBottom: "48px", overflowY: "auto" }}
+              >
                 {solarSystems[selectedSystem].map((worldName) => {
                   // ...existing code...
                   const fleetsAtWorld = Object.entries(systemData).reduce(

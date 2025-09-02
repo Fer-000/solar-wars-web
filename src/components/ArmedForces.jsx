@@ -547,7 +547,6 @@ const ArmedForces = ({ onBack, nationName, dbLoaded }) => {
       // Map 'Activate' to 'Idle', 'Attack' to 'Battle'
       let mappedAction = action;
       if (action === "Activate") mappedAction = "Idle";
-      if (action === "Attack") mappedAction = "Battle";
 
       fleets[fleetIndex].State = {
         ...fleets[fleetIndex].State,
@@ -558,41 +557,13 @@ const ArmedForces = ({ onBack, nationName, dbLoaded }) => {
 
       setUnits((prev) =>
         prev.map((u) =>
-          u.id === selectedUnit.id
-            ? { ...u, state: mappedAction, status: mappedAction }
-            : u
+          u.id === selectedUnit.id ? { ...u, status: mappedAction } : u
         )
       );
       setShowModal(false); // <-- Close the modal after action
       console.log(`Fleet ${selectedUnit.name} action set to ${mappedAction}`);
     } catch (err) {
       console.error("Failed to update unit action:", err);
-    }
-  };
-
-  // Update unit status (Active, Mothballed)
-  const handleUpdateStatus = async (status) => {
-    if (!selectedUnit) return;
-    try {
-      const fleets = await databaseService.getFleets(
-        "The Solar Wars",
-        nationName
-      );
-      const fleetIndex = fleets.findIndex((f) => f.ID === selectedUnit.id);
-      if (fleetIndex === -1) return;
-
-      fleets[fleetIndex].Status = status;
-
-      await databaseService.updateFleets("The Solar Wars", nationName, fleets);
-
-      setUnits((prev) =>
-        prev.map((u) =>
-          u.id === selectedUnit.id ? { ...u, status: status } : u
-        )
-      );
-      console.log(`Fleet ${selectedUnit.name} status set to ${status}`);
-    } catch (err) {
-      console.error("Failed to update unit status:", err);
     }
   };
 
@@ -845,9 +816,6 @@ const ArmedForces = ({ onBack, nationName, dbLoaded }) => {
                       <strong>Status:</strong> {selectedUnit.status}
                     </p>
                     <p>
-                      <strong>State:</strong> {selectedUnit.state}
-                    </p>
-                    <p>
                       <strong>Type:</strong> {selectedUnit.type}
                     </p>
                     {selectedUnit.value &&
@@ -909,7 +877,7 @@ const ArmedForces = ({ onBack, nationName, dbLoaded }) => {
                     <button
                       className="command-btn mothball"
                       disabled={selectedUnit.status === "Mothballed"}
-                      onClick={() => handleUpdateStatus("Mothballed")}
+                      onClick={() => handleUpdateAction("Mothballed")}
                     >
                       Mothball
                     </button>
@@ -1481,7 +1449,9 @@ const ArmedForces = ({ onBack, nationName, dbLoaded }) => {
           <div className="modal-overlay" onClick={closeVehicleModal}>
             <div className="unit-modal" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header">
-                <h2>{selectedVehicle.name || "Vehicle Details"}</h2>
+                <h2>
+                  {selectedVehicle.name} (ID: {selectedVehicle.ID})
+                </h2>
                 <button className="close-btn" onClick={closeVehicleModal}>
                   ✕
                 </button>

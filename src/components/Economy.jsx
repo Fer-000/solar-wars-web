@@ -58,7 +58,7 @@ const Economy = ({ onBack, nationName, dbLoaded }) => {
   const [showIncomeModal, setShowIncomeModal] = useState(false);
   const [buyVehicleModal, setBuyVehicleModal] = useState(false);
   const [selectedVehicleType, setSelectedVehicleType] = useState("");
-  const [selectedFleetId, setSelectedFleetId] = useState("");
+  const [selectedFleetName, setSelectedFleetName] = useState("");
   const [buyAmount, setBuyAmount] = useState(1);
   const [buyStatus, setBuyStatus] = useState("");
   const [loading, setLoading] = useState(true);
@@ -128,7 +128,7 @@ const Economy = ({ onBack, nationName, dbLoaded }) => {
           const vehicleTypesWithCosts = vehicles.map((vehicle) => ({
             id: vehicle.ID,
             name: vehicle.name,
-            cost: vehicle.cost ? Object.values(vehicle.cost)[0] || 0 : 0,
+            cost: vehicle.cost,
           }));
           setVehicleTypes(vehicleTypesWithCosts);
 
@@ -157,7 +157,164 @@ const Economy = ({ onBack, nationName, dbLoaded }) => {
 
   // Purchase vehicle function
   const handleBuyVehicle = async () => {
-    // ...existing code...
+    if (!selectedVehicleType || !selectedFleetName || !buyAmount) {
+      setBuyStatus("Please select vehicle type, fleet, and enter valid amount");
+      return;
+    }
+
+    try {
+      setBuyStatus("Processing purchase...");
+
+      // Parse vehicle type (it's stored as a string, need to parse it back to object)
+      const vehicle = JSON.parse(selectedVehicleType);
+
+      // Get faction ID
+      const allFactions = await databaseService.getFactions("The Solar Wars");
+      const factionEntry = Object.entries(allFactions).find(
+        ([key, value]) =>
+          value?.name?.toLowerCase() === nationName.toLowerCase()
+      );
+      const factionId = factionEntry ? factionEntry[0] : null;
+
+      if (!factionId) {
+        setBuyStatus("Error: Faction not found");
+        return;
+      }
+
+      // Get current faction data
+      const factionData = await databaseService.getFaction(
+        "The Solar Wars",
+        factionId
+      );
+
+      if (!factionData) {
+        setBuyStatus("Error: Could not load faction data");
+        return;
+      }
+
+      // Calculate total cost
+      const totalCost = {
+        ER: (vehicle.cost.ER || 0) * buyAmount,
+        CM: (vehicle.cost.CM || 0) * buyAmount,
+        EL: (vehicle.cost.EL || 0) * buyAmount,
+        CS: (vehicle.cost.CS || 0) * buyAmount,
+      };
+
+      // Check if faction has enough resources
+      const currentResources = factionData.Resources || {};
+      for (const [resource, cost] of Object.entries(totalCost)) {
+        if (cost > 0 && (currentResources[resource] || 0) < cost) {
+          setBuyStatus(
+            `Insufficient ${resource}: need ${cost.toLocaleString()}, have ${(
+              currentResources[resource] || 0
+            ).toLocaleString()}`
+          );
+          return;
+        }
+      }
+
+      // Find the fleet
+      const fleets = factionData.Fleets || [];
+      const fleetIndex = fleets.findIndex((f) => f.ID == selectedFleetName);
+      console.log("Fleets", fleets);
+      console.log("Selected Fleet Name:", selectedFleetName);
+      console.log("Fleet Index:", fleetIndex);
+
+      if (fleetIndex === -1) {
+        setBuyStatus("Error: Fleet not found");
+        return;
+      }
+
+      // Clone the faction data for updates
+      const updatedFactionData = { ...factionData };
+      const updatedFleets = [...fleets];
+      const targetFleet = { ...fleets[fleetIndex] };
+      const updatedVehicles = [...(targetFleet.Vehicles || [])];
+
+      // Check if vehicle already exists in fleet
+      const existingVehicleIndex = updatedVehicles.findIndex(
+        (v) => v.ID === vehicle.id
+      );
+
+      if (existingVehicleIndex !== -1) {
+        // Vehicle exists, add to count
+        updatedVehicles[existingVehicleIndex] = {
+          ...updatedVehicles[existingVehicleIndex],
+          count: (updatedVehicles[existingVehicleIndex].count || 0) + buyAmount,
+        };
+      } else {
+        // Vehicle doesn't exist, add new entry
+        updatedVehicles.push({
+          ID: vehicle.id,
+          count: buyAmount,
+          faction: factionId,
+        });
+      }
+
+      // Update fleet with new vehicles
+      targetFleet.Vehicles = updatedVehicles;
+
+      // Update fleet Value - add the total cost of purchased vehicles
+      const currentValue = targetFleet.Value || { CM: 0, EL: 0, CS: 0, ER: 0 };
+      targetFleet.Value = {
+        CM: (currentValue.CM || 0) + totalCost.CM,
+        EL: (currentValue.EL || 0) + totalCost.EL,
+        CS: (currentValue.CS || 0) + totalCost.CS,
+        ER: (currentValue.ER || 0) + totalCost.ER,
+      };
+
+      // Update CSCost - add CS cost / 6
+      targetFleet.CSCost = (targetFleet.CSCost || 0) + totalCost.CS / 6;
+
+      // Update fleets array
+      updatedFleets[fleetIndex] = targetFleet;
+      updatedFactionData.Fleets = updatedFleets;
+
+      // Deduct resources from faction treasury
+      const updatedResources = { ...currentResources };
+      for (const [resource, cost] of Object.entries(totalCost)) {
+        if (cost > 0) {
+          updatedResources[resource] = (updatedResources[resource] || 0) - cost;
+        }
+      }
+      updatedFactionData.Resources = updatedResources;
+
+      // Update the database
+      await databaseService.setFaction(
+        "The Solar Wars",
+        factionId,
+        updatedFactionData
+      );
+
+      // Update local state
+      setResources(updatedResources);
+
+      // Update local fleets state
+      const updatedLocalFleets = fleets.map((fleet) =>
+        fleet.Name === selectedFleetName
+          ? { ...fleet, Vehicles: targetFleet.Vehicles }
+          : fleet
+      );
+      setFleets(updatedLocalFleets);
+
+      setBuyStatus(
+        `Successfully purchased ${buyAmount} ${vehicle.name}(s) for fleet ${
+          targetFleet.Name || selectedFleetName
+        }. ` +
+          `Cost: ${Object.entries(totalCost)
+            .filter(([, cost]) => cost > 0)
+            .map(([resource, cost]) => `${cost.toLocaleString()} ${resource}`)
+            .join(", ")}`
+      );
+
+      // Reset form
+      setSelectedVehicleType("");
+      setSelectedFleetName("");
+      setBuyAmount(1);
+    } catch (error) {
+      console.error("Error purchasing vehicle:", error);
+      setBuyStatus("Error: Failed to purchase vehicle - " + error.message);
+    }
   };
 
   // Swipe handlers
@@ -439,7 +596,7 @@ const Economy = ({ onBack, nationName, dbLoaded }) => {
 
           <div className="right-sidebar">
             <div className="center-card">
-              <h3>Buy Vehicles DO NOT USE</h3>
+              <h3>Buy Vehicles</h3>
               <div style={{ marginBottom: "10px" }}>
                 <select
                   value={selectedVehicleType}
@@ -448,16 +605,21 @@ const Economy = ({ onBack, nationName, dbLoaded }) => {
                 >
                   <option value="">Select vehicle type...</option>
                   {vehicleTypes.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.name} ({v.cost.toLocaleString()} ER)
+                    <option key={v.id} value={JSON.stringify(v)}>
+                      {v.name} (
+                      {(typeof v.cost.ER === "number"
+                        ? v.cost.ER
+                        : Number(v.cost.ER)
+                      ).toLocaleString("en-US")}{" "}
+                      ER)
                     </option>
                   ))}
                 </select>
               </div>
               <div style={{ marginBottom: "10px" }}>
                 <select
-                  value={selectedFleetId}
-                  onChange={(e) => setSelectedFleetId(e.target.value)}
+                  value={selectedFleetName}
+                  onChange={(e) => setSelectedFleetName(e.target.value)}
                   style={{ width: "100%", padding: "6px", borderRadius: "4px" }}
                 >
                   <option value="">Select fleet...</option>
@@ -470,10 +632,7 @@ const Economy = ({ onBack, nationName, dbLoaded }) => {
               </div>
               <div style={{ marginBottom: "10px" }}>
                 <input
-                  type="number"
-                  min={1}
-                  max={100}
-                  value={buyAmount}
+                  type="text"
                   onChange={(e) => setBuyAmount(Number(e.target.value))}
                   style={{ width: "80px", marginRight: "8px" }}
                 />
