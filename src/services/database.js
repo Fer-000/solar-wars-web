@@ -206,6 +206,10 @@ class DatabaseService {
     return faction?.Resources || {};
   }
 
+  async getData(server = "The Solar Wars"){
+    const data = await this.getFaction(server, "Data");
+    return data;
+  }
   // Get faction's basic info
   async getFactionInfo(server = "The Solar Wars", factionId) {
     const faction = await this.getFaction(server, factionId);
