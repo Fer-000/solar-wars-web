@@ -52,6 +52,46 @@ function App() {
     }
   };
 
+  const fetchUserSettings = async (factionId) => {
+    try {
+      // Try to get faction data from cache first
+      let factionData = null;
+      const cachedData = globalDB.get();
+
+      if (cachedData && cachedData["The Solar Wars"]) {
+        factionData = cachedData["The Solar Wars"][factionId.toLowerCase()];
+      }
+
+      if (factionData) {
+        const newSettings = {
+          treatment: factionData.leader || "Commander",
+          nationName: factionData.name || factionId,
+          themeColor: factionData.color || "#646cff",
+          factionId: factionId,
+        };
+
+        setUserSettings(newSettings);
+        return newSettings;
+      } else {
+        console.warn(`Faction ${factionId} not found in database`);
+        // Keep default settings but set factionId
+        setUserSettings((prev) => ({
+          ...prev,
+          factionId: factionId,
+          nationName: factionId,
+        }));
+      }
+    } catch (error) {
+      console.error("Error fetching user settings:", error);
+      // Keep default settings but set factionId
+      setUserSettings((prev) => ({
+        ...prev,
+        factionId: factionId,
+        nationName: factionId,
+      }));
+    }
+  };
+
   const handleEnter = async (faction, refereeData = null) => {
     if (faction === "referee") {
       // Set referee mode and open tactical map
@@ -61,19 +101,25 @@ function App() {
         worlds: refereeData.worlds,
       });
       setNationId("referee");
+      if (!dbLoaded) {
+        await fetchAndCacheDB();
+      }
       setCurrentView("tactical-map");
+
       return;
     }
 
     // Normal faction login
     setRefereeMode({ isReferee: false, nations: [], worlds: [] });
     setNationId(faction);
+
     setCurrentView("dashboard");
 
     // Cache DB if not already loaded
     if (!dbLoaded) {
       await fetchAndCacheDB();
     }
+    fetchUserSettings(faction);
   };
 
   const handleNavigation = (section) => {
