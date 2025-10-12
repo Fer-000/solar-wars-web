@@ -130,6 +130,14 @@ function App() {
     setCurrentView("settings");
   };
 
+  const handleWiki = () => {
+    var win = window.open(
+      "https://fer-000.github.io/solar-wars-wiki",
+      "_blank"
+    );
+    win.focus();
+  };
+
   const handleSettingsChange = (newSettings) => {
     setUserSettings((prev) => ({ ...prev, ...newSettings }));
   };
@@ -183,6 +191,7 @@ function App() {
         nationId={nationId}
         userSettings={userSettings}
         onNavigation={handleNavigation}
+        onWiki={handleWiki}
         onSettings={handleSettings}
         dbLoaded={dbLoaded}
       />
