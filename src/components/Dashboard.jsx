@@ -6,6 +6,7 @@ import "./Dashboard.css";
 const Dashboard = ({
   nationId,
   onNavigation,
+  onWiki,
   onSettings,
   userSettings = {},
 }) => {
@@ -67,6 +68,9 @@ const Dashboard = ({
           ))}
         </div>
 
+        <button className="settings-button-bottom" onClick={onWiki}>
+          📖
+        </button>
         <button className="settings-button-bottom" onClick={onSettings}>
           ⚙️
         </button>
