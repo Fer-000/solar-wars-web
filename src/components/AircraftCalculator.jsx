@@ -83,6 +83,20 @@ const AircraftCalculator = ({ nationName, onRegister }) => {
       num_type: "ufloat",
       default: 20,
     },
+    wingspan: {
+      id: "wingspan",
+      label: "Wingspan (m)",
+      type: "number",
+      num_type: "ufloat",
+      default: 20,
+    },
+    size_basis: {
+      id: "size_basis",
+      label: "Size Basis",
+      type: "select",
+      options: { length: "Length", wingspan: "Wingspan" },
+      default: "length",
+    },
     type: {
       id: "type",
       label: "Aircraft Type",
@@ -92,7 +106,13 @@ const AircraftCalculator = ({ nationName, onRegister }) => {
     },
     weapons: {
       id: "weapons",
-      label: "Hardpoints / Weapons",
+      label: "Has Weapons (hardpoints)",
+      type: "bool",
+      default: false,
+    },
+    guns: {
+      id: "guns",
+      label: "Guns / Cannons (count)",
       type: "number",
       num_type: "uint",
       default: 0,
@@ -107,9 +127,10 @@ const AircraftCalculator = ({ nationName, onRegister }) => {
     },
     stealth: {
       id: "stealth",
-      label: "Stealth Tech",
-      type: "bool",
-      default: false,
+      label: "Stealth",
+      type: "select",
+      options: { none: "None", low: "Low", yes: "Yes" },
+      default: "none",
     },
     engines: {
       id: "engines",
@@ -124,6 +145,13 @@ const AircraftCalculator = ({ nationName, onRegister }) => {
       num_type: "uint",
       default: 0,
     },
+    ordnance_kg: {
+      id: "ordnance_kg",
+      label: "Ordnance (kg)",
+      type: "number",
+      num_type: "ufloat",
+      default: 0,
+    },
     cargo: {
       id: "cargo",
       label: "Cargo Capacity",
@@ -131,6 +159,61 @@ const AircraftCalculator = ({ nationName, onRegister }) => {
       num_type: "ufloat",
       default: 0,
     },
+    helicopter: {
+      id: "helicopter",
+      label: "Helicopter",
+      type: "bool",
+      default: false,
+    },
+    drone: { id: "drone", label: "Drone", type: "bool", default: false },
+    radar: {
+      id: "radar",
+      label: "Radar",
+      type: "select",
+      options: { none: "None", AEW: "AEW" },
+      default: "none",
+    },
+    flight_type: {
+      id: "flight_type",
+      label: "Flight Type",
+      type: "select",
+      options: { air: "Air", hybrid: "Hybrid", space: "Space" },
+      default: "air",
+    },
+    capability: {
+      id: "capability",
+      label: "Capability",
+      type: "select",
+      options: { none: "None", STOL: "STOL", VTOL: "VTOL" },
+      default: "none",
+    },
+    speed_mach: {
+      id: "speed_mach",
+      label: "Speed (Mach)",
+      type: "number",
+      num_type: "ufloat",
+      default: 0.9,
+    },
+    mach: {
+      id: "mach",
+      label: "Mach (flat add)",
+      type: "number",
+      num_type: "ufloat",
+      default: 0,
+    },
+    speed: {
+      id: "speed",
+      label: "Space Speed",
+      type: "select",
+      options: {
+        slow: "slow",
+        medium: "medium",
+        fast: "fast",
+        very_fast: "very_fast",
+      },
+      default: "medium",
+    },
+    shield: { id: "shield", label: "Shield", type: "bool", default: false },
     other: {
       id: "other",
       label: "Misc Costs",
@@ -145,128 +228,213 @@ const AircraftCalculator = ({ nationName, onRegister }) => {
   };
 
   const calculateRate = () => {
-    const processedValues = { ...values };
-    processedValues.engines = splitCurrency(values.engines || "1S", "S");
-
+    const pv = { ...values };
+    // defaults and normalization
     const {
       length = 20,
-      type = "fighter",
-      weapons = 0,
-      armor = 0,
-      stealth = false,
-      engines = [],
+      wingspan = 20,
+      size_basis = "length",
+      type: role = "fighter",
+      weapons: has_weapons = false,
+      guns = 0,
+      ordnance_kg = 0,
+      helicopter = false,
+      drone = false,
+      stealth = "none",
+      radar = "none",
+      flight_type = "air",
+      shield = false,
       systems = 0,
-      cargo = 0,
+      capability = "none",
+      speed_mach = 0,
+      mach = 0,
+      speed = "medium",
       other = 0,
-    } = processedValues;
+    } = pv;
 
-    // Aircraft modifiers
-    const typeModifiers = {
-      fighter: { er: 1.2, cm: 1.1, el: 1.3, cs: 1.0 },
-      bomber: { er: 1.0, cm: 1.3, el: 1.1, cs: 1.2 },
-      transport: { er: 0.8, cm: 1.2, el: 0.9, cs: 1.1 },
-      drone: { er: 0.7, cm: 0.9, el: 1.4, cs: 1.3 },
-      gunship: { er: 1.3, cm: 1.4, el: 1.2, cs: 1.1 },
-    };
-    const modifier = typeModifiers[type];
+    const use_length = size_basis === "length";
+    const use_wingspan = size_basis === "wingspan";
 
-    // ER calculation
-    const baseCost = length * 15;
-    const weaponCost = weapons * 8;
-    const armorCost = armor * length * 2;
-    const stealthCost = stealth ? length * 5 : 0;
-    const systemsCost = systems * length * 0.5;
-    const cargoCost = cargo * 0.5;
+    const size = use_length ? length : use_wingspan ? wingspan : length;
 
-    const engineCosts = { S: 3, M: 5, L: 8 };
-    const engineCost = engines.reduce(
-      (acc, [count, type]) =>
-        isNaN(count) || engineCosts[type] === undefined
-          ? acc
-          : acc + count * engineCosts[type],
-      0
-    );
+    // Base calculations
+    let Base_ER = Math.pow(size, 2) / 120 + size * 220000 + 15000000;
+    let CS = 0;
+    let Base_CM, Base_EL;
 
-    const erTotal =
-      (baseCost +
-        weaponCost +
-        armorCost +
-        stealthCost +
-        systemsCost +
-        engineCost +
-        cargoCost +
-        other) *
-      modifier.er;
+    if (role === "fighter") {
+      Base_CM = size * 5.4;
+      Base_EL = size * 31.88;
+    } else {
+      Base_CM = size * 1.1;
+      Base_EL = size * 2.2;
+    }
 
-    // CM calculation
-    const baseCostCm = length * 25;
-    const weaponCostCm = weapons * 30;
-    const armorCostCm = armor * length * 3;
-    const stealthCostCm = stealth ? length * 10 : 0;
-    const systemsCostCm = systems * length;
-    const cargoCostCm = cargo * 2;
+    // Armament
+    if (has_weapons) {
+      Base_ER *= 1.6;
+      Base_CM *= 1.3;
+      CS += 6;
+    } else {
+      Base_ER *= 0.8;
+      Base_CM *= 0.9;
+      CS += 2;
+    }
 
-    const engineCostsCm = { S: 20, M: 35, L: 60 };
-    const engineCostCm = engines.reduce(
-      (acc, [count, type]) =>
-        isNaN(count) || engineCostsCm[type] === undefined
-          ? acc
-          : acc + count * engineCostsCm[type],
-      0
-    );
+    // Helicopter
+    if (helicopter) {
+      Base_ER *= 0.6;
+      Base_CM *= 0.8;
+      CS *= 0.9;
+    }
 
-    const cmTotal =
-      (baseCostCm +
-        weaponCostCm +
-        armorCostCm +
-        stealthCostCm +
-        systemsCostCm +
-        engineCostCm +
-        cargoCostCm) *
-      modifier.cm;
+    // Drone
+    if (drone) {
+      Base_ER *= 0.4;
+      Base_CM *= 0.4;
+      Base_EL *= 0.5;
+      CS *= 0.6;
+    }
 
-    // EL calculation
-    const baseCostEl = stealth ? length * 8 : length * 2;
-    const weaponCostEl = weapons * 40;
-    const systemsCostEl = systems * length * 1.5;
-    const cargoCostEl = cargo * 1;
+    // Stealth
+    if (stealth === "yes") {
+      Base_ER *= 2.0;
+      Base_EL *= 1.2;
+      CS *= 1.2;
+    } else if (stealth === "low") {
+      Base_ER *= 1.15;
+      Base_EL += 10;
+      CS += 2;
+    }
 
-    const engineCostsEl = { S: 15, M: 25, L: 40 };
-    const engineCostEl = engines.reduce(
-      (acc, [count, type]) =>
-        isNaN(count) || engineCostsEl[type] === undefined
-          ? acc
-          : acc + count * engineCostsEl[type],
-      0
-    );
+    // Radar/AEW
+    if (radar === "AEW") {
+      Base_ER += 4000000;
+      Base_CM += 10;
+      Base_EL += 20;
+      CS += 3;
+    }
 
-    const elTotal =
-      (baseCostEl + weaponCostEl + systemsCostEl + engineCostEl + cargoCostEl) *
-      modifier.el;
+    // Flight type
+    if (flight_type === "air") {
+      Base_ER *= 1.0;
+      Base_EL *= 1.0;
+      CS *= 1.0;
+    } else if (flight_type === "hybrid") {
+      Base_ER *= 1.2;
+      Base_EL *= 1.2;
+      CS *= 1.1;
+    } else if (flight_type === "space") {
+      Base_ER *= 1.5;
+      Base_EL *= 1.3;
+      CS *= 1.2;
+    }
 
-    // CS calculation
-    const baseCostCs = length * 3;
-    const weaponCostCs = weapons * 5;
-    const systemsCostCs = systems * length;
+    // Shield
+    if (shield) {
+      Base_ER += 5000000;
+      Base_EL += 10;
+      CS += 2;
+    }
 
-    const engineCostsCs = { S: 5, M: 10, L: 15 };
-    const engineCostCs = engines.reduce(
-      (acc, [count, type]) =>
-        isNaN(count) || engineCostsCs[type] === undefined
-          ? acc
-          : acc + count * engineCostsCs[type],
-      0
-    );
+    // Load capacity (ordnance in kg)
+    Base_ER += 150000 * (ordnance_kg / 100);
 
-    const csTotal =
-      (baseCostCs + weaponCostCs + systemsCostCs + engineCostCs) * modifier.cs;
+    // Guns/cannons
+    Base_ER += 250000 * (guns || 0);
+    Base_EL += 2 * (guns || 0);
+    CS += 1 * (guns || 0);
+
+    // Systems
+    Base_ER += 300000 * (systems || 0);
+    Base_EL += 1.5 * (systems || 0);
+    CS += 12 * (systems || 0);
+
+    // Capability
+    if (capability === "STOL") {
+      Base_ER *= 1.1;
+      Base_EL += 5;
+      CS += 2;
+    } else if (capability === "VTOL") {
+      Base_ER *= 1.25;
+      Base_EL += 15;
+      CS += 5;
+    }
+
+    // Speed additions (air/hybrid)
+    if (flight_type === "air" || flight_type === "hybrid") {
+      if (role === "fighter") {
+        if (speed_mach > 2.5) {
+          Base_ER *= 1 + Math.pow((speed_mach - 2.5) * 1.1, 2);
+        }
+      } else if (role === "bomber" || role === "bomber/transport") {
+        if (speed_mach > 2.0) {
+          Base_ER *= 1 + Math.pow((speed_mach - 2.0) * 1.1, 2);
+        }
+      } else if (
+        role === "transport" ||
+        role === "cargo" ||
+        role === "tiltrotor"
+      ) {
+        if (speed_mach > 1.0) {
+          Base_ER *= 1 + Math.pow((speed_mach - 1.0) * 1.1, 2);
+        }
+      } else if (role === "helicopter") {
+        if (speed_mach > 1.0) {
+          Base_ER *= 1 + Math.pow((speed_mach - 1.0) * 1.1, 2);
+        }
+      }
+    }
+
+    // Mach flat addition
+    if (flight_type === "air") {
+      Base_ER += mach * 6000000;
+    } else if (flight_type === "hybrid") {
+      Base_ER += mach * 4000000;
+    } else if (flight_type === "space") {
+      const speed_dict = {
+        slow: 2000000,
+        medium: 4000000,
+        fast: 7000000,
+        very_fast: 11000000,
+      };
+      Base_ER += speed_dict[speed] || 0;
+    }
+
+    // Strategic multiplier for large wingspans
+    if (use_wingspan && wingspan >= 30) {
+      const base_multiplier =
+        1 + Math.pow(wingspan / 45, 2.8) + Math.pow(ordnance_kg / 10000, 2);
+      let strategic_multiplier;
+      if (role === "bomber" || role === "bomber/transport") {
+        strategic_multiplier = Math.min(base_multiplier, 1.3);
+      } else {
+        strategic_multiplier = base_multiplier;
+      }
+      Base_ER *= strategic_multiplier;
+    }
+
+    // Transport scalar
+    if (role === "transport" || role === "cargo" || role === "tiltrotor") {
+      Base_ER *= 4.0;
+    }
+
+    // Helicopter scalar
+    if (helicopter) {
+      Base_ER *= 1.15;
+    }
+
+    const ER = Base_ER + (other || 0);
+    const CM = Base_CM;
+    const EL = Base_EL;
+    const csVal = CS;
 
     setResult({
-      er: Math.ceil(erTotal * 1000),
-      cm: Math.ceil(cmTotal),
-      el: Math.ceil(elTotal),
-      cs: Math.ceil(csTotal),
-      cs_upkeep: Math.ceil(csTotal / 6),
+      er: Math.ceil(ER),
+      cm: Math.ceil(CM),
+      el: Math.ceil(EL),
+      cs: Math.ceil(csVal),
+      cs_upkeep: Math.ceil(csVal / 6),
     });
   };
 
