@@ -1,7 +1,25 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import StarField from "./StarField";
 import databaseService from "../services/database";
 import "./Settings.css";
+
+// Simple Back Arrow Icon
+const BackIcon = () => (
+  <svg
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3"
+    />
+  </svg>
+);
 
 const Settings = ({ onBack, userSettings = {}, onSettingsChange }) => {
   const [treatment, setTreatment] = useState(
@@ -11,36 +29,23 @@ const Settings = ({ onBack, userSettings = {}, onSettingsChange }) => {
     userSettings.nationName || "Nation ID"
   );
   const [themeColor, setThemeColor] = useState(
-    userSettings.themeColor || "#646cff"
+    userSettings.themeColor || "#00f3ff"
   );
 
-  // Automatically load name, leader, and color when login is done
-  React.useEffect(() => {
+  // --- Database Logic (Preserved) ---
+  useEffect(() => {
     async function fetchFactionInfo() {
       if (userSettings.factionId) {
         try {
-          console.log("Fetching faction data for:", userSettings.factionId);
           const faction = await databaseService.getFaction(
             "The Solar Wars",
             userSettings.factionId
           );
-          console.log("Loaded faction data:", faction);
-
           if (faction) {
-            if (faction.leader) {
-              console.log("Setting treatment from DB:", faction.leader);
-              setTreatment(faction.leader);
-            }
-            if (faction.name) {
-              console.log("Setting nation name from DB:", faction.name);
-              setNationName(faction.name);
-            }
-            if (faction.color) {
-              console.log("Setting theme color from DB:", faction.color);
-              setThemeColor(faction.color);
-            }
+            if (faction.leader) setTreatment(faction.leader);
+            if (faction.name) setNationName(faction.name);
+            if (faction.color) setThemeColor(faction.color);
 
-            // Update parent component with loaded data
             if (onSettingsChange) {
               onSettingsChange({
                 treatment: faction.leader || treatment,
@@ -48,30 +53,19 @@ const Settings = ({ onBack, userSettings = {}, onSettingsChange }) => {
                 themeColor: faction.color || themeColor,
               });
             }
-          } else {
-            console.log("No faction data found");
           }
         } catch (error) {
           console.error("Error loading faction data:", error);
         }
-      } else {
-        console.log("No factionId in userSettings");
       }
     }
     fetchFactionInfo();
   }, [userSettings.factionId]);
 
   const handleSave = async () => {
-    // Update user profile in the database (setFaction)
     if (userSettings.factionId) {
       try {
-        console.log("Saving to database:", {
-          leader: treatment,
-          name: nationName,
-          color: themeColor,
-        });
-
-        const result = await databaseService.setFaction(
+        await databaseService.setFaction(
           "The Solar Wars",
           userSettings.factionId,
           {
@@ -80,51 +74,57 @@ const Settings = ({ onBack, userSettings = {}, onSettingsChange }) => {
             color: themeColor,
           }
         );
-
-        if (result) {
-          console.log("Settings saved to database successfully");
-        } else {
-          console.error("Failed to save settings to database");
-        }
       } catch (error) {
         console.error("Error saving settings to database:", error);
       }
-    } else {
-      console.error("No factionId provided in userSettings");
     }
     if (onSettingsChange) {
       onSettingsChange({ treatment, nationName, themeColor });
     }
     onBack();
   };
+  // ----------------------------------
 
   return (
-    <div className="settings">
-      <StarField density={100} />
+    <div className="settings-container">
+      <div className="grid-overlay"></div>
+      <StarField density={80} />
+
       <div className="settings-content">
+        {/* Header Section */}
         <div className="settings-header">
-          <button className="back-button" onClick={onBack}>
-            ← Back
+          <button className="back-btn" onClick={onBack}>
+            <BackIcon />
+            <span>RETURN</span>
           </button>
-          <h1>Settings</h1>
+          <h1>SYSTEM CONFIGURATION</h1>
         </div>
 
+        {/* Settings Grid */}
         <div className="settings-grid">
-          <div className="setting-card">
-            <h3>Personal</h3>
-            <div className="setting-option">
-              <label>Treatment</label>
+          {/* Card 1: Personal */}
+          <div className="tech-card settings-card">
+            <div className="corner-marker top-left"></div>
+            <div className="corner-marker top-right"></div>
+            <div className="corner-marker bottom-left"></div>
+            <div className="corner-marker bottom-right"></div>
+
+            <h3>IDENTITY</h3>
+            <div className="setting-group">
+              <label>LEADER TITLE</label>
               <input
                 type="text"
+                className="tech-input"
                 value={treatment}
                 onChange={(e) => setTreatment(e.target.value)}
                 placeholder="Commander"
               />
             </div>
-            <div className="setting-option">
-              <label>Nation Name</label>
+            <div className="setting-group">
+              <label>NATION NAME</label>
               <input
                 type="text"
+                className="tech-input"
                 value={nationName}
                 onChange={(e) => setNationName(e.target.value)}
                 placeholder="Nation ID"
@@ -132,43 +132,73 @@ const Settings = ({ onBack, userSettings = {}, onSettingsChange }) => {
             </div>
           </div>
 
-          <div className="setting-card">
-            <h3>Display</h3>
-            <div className="setting-option">
-              <label>Theme Color</label>
-              <input
-                type="color"
-                value={themeColor}
-                onChange={(e) => setThemeColor(e.target.value)}
-              />
+          {/* Card 2: Display */}
+          <div className="tech-card settings-card">
+            <div className="corner-marker top-left"></div>
+            <div className="corner-marker top-right"></div>
+            <div className="corner-marker bottom-left"></div>
+            <div className="corner-marker bottom-right"></div>
+
+            <h3>VISUAL INTERFACE</h3>
+            <div className="setting-group">
+              <label>NATIONAL COLOR</label>
+              <div className="color-picker-wrapper">
+                <input
+                  type="color"
+                  className="tech-color-input"
+                  value={themeColor}
+                  onChange={(e) => setThemeColor(e.target.value)}
+                />
+                <span className="color-value">{themeColor}</span>
+              </div>
             </div>
-            <div className="setting-option">
-              <label>Theme</label>
-              <select defaultValue="dark">
-                <option value="dark">Dark Mode</option>
+            <div className="setting-group">
+              <label>INTERFACE MODE</label>
+              <select className="tech-select" defaultValue="dark">
+                <option value="dark">TACTICAL DARK</option>
+                <option value="light">THERE AIN'T ANOTHER OPTION SON</option>
               </select>
             </div>
           </div>
 
-          <div className="setting-card">
-            <h3>Credits</h3>
-            <div className="setting-option">
-              <label>Created by Fer0</label>
-            </div>
-            <div className="setting-option">
-              <label>SW Bot by Fer0 and Syndicationus</label>
-            </div>
-            <div className="setting-option">
-              <label>Inspired by Proxy's SW Rater website</label>
-            </div>
-            <div className="setting-option">
-              <label>v0.6w</label>
+          {/* Card 3: Credits */}
+          <div className="tech-card settings-card">
+            <div className="corner-marker top-left"></div>
+            <div className="corner-marker top-right"></div>
+            <div className="corner-marker bottom-left"></div>
+            <div className="corner-marker bottom-right"></div>
+
+            <h3>CREDITS</h3>
+            <div className="credits-list">
+              <div className="credit-item">
+                <span className="credit-role">Made By</span>
+                <span className="credit-name">Fer0</span>
+              </div>
+              <div className="credit-item">
+                <span className="credit-role">SW Bot by</span>
+                <span className="credit-name">Fer0 & Syndicationus</span>
+              </div>
+              <div className="credit-item">
+                <span className="credit-role">Inspired by:</span>
+                <span className="credit-name">Proxy's SW Rater website</span>
+              </div>
+              <div className="credit-item">
+                <span className="credit-role"></span>
+                <span className="credit-name">
+                  Art from Charcoal and Vijasa
+                </span>
+              </div>
+              <div className="credit-item">
+                <span className="credit-role">VERSION</span>
+                <span className="credit-name">0.7w</span>
+              </div>
             </div>
           </div>
         </div>
 
-        <div className="settings-actions">
-          <button className="save-button" onClick={handleSave}>
+        {/* Action Footer */}
+        <div className="settings-footer">
+          <button className="save-btn" onClick={handleSave}>
             Save Settings
           </button>
         </div>

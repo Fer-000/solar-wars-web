@@ -1,13 +1,71 @@
 import React, { useState } from "react";
-import InputField from "./InputField";
 import splitCurrency from "../utils/splitCurrency";
 import "./RateCalculator.css";
 
-const ShipCalculator = () => {
+// Helper Component
+const TechInput = ({ param, value, onChange }) => {
+  const handleChange = (e) => {
+    const val =
+      param.type === "bool"
+        ? e.target.checked
+        : param.num_type === "uint" || param.num_type === "ufloat"
+        ? parseFloat(e.target.value) || 0
+        : e.target.value;
+    onChange(param.id, val);
+  };
+
+  if (param.type === "bool") {
+    return (
+      <div className="input-group">
+        <label className="tech-checkbox-wrapper">
+          <span className="input-label">{param.label}</span>
+          <input
+            type="checkbox"
+            className="tech-checkbox"
+            checked={!!value}
+            onChange={handleChange}
+          />
+        </label>
+      </div>
+    );
+  }
+
+  if (param.type === "select") {
+    return (
+      <div className="input-group">
+        <label className="input-label">{param.label}</label>
+        <select
+          className="tech-select"
+          value={value || param.default}
+          onChange={handleChange}
+        >
+          {Object.entries(param.options).map(([optKey, optLabel]) => (
+            <option key={optKey} value={optKey}>
+              {optLabel}
+            </option>
+          ))}
+        </select>
+      </div>
+    );
+  }
+
+  return (
+    <div className="input-group">
+      <label className="input-label">{param.label}</label>
+      <input
+        type={param.type === "number" ? "number" : "text"}
+        className="tech-input"
+        value={value ?? param.default}
+        onChange={handleChange}
+      />
+    </div>
+  );
+};
+
+const ShipCalculator = ({ nationName, onRegister }) => {
   const [values, setValues] = useState({});
   const [result, setResult] = useState(null);
-  const [userName, setUserName] = useState("");
-  const [showRegister, setShowRegister] = useState(false);
+  const [vehicleName, setVehicleName] = useState("");
 
   const ftlTypes = {
     EXT: "External FTL",
@@ -18,94 +76,99 @@ const ShipCalculator = () => {
   const params = {
     length: {
       id: "length",
-      label: "Length of the Ship",
+      label: "Length (m)",
       type: "number",
       num_type: "ufloat",
       default: 100,
     },
     main: {
       id: "main",
-      label: "Primary Weapon Count",
+      label: "Primary Weapons",
       type: "number",
       num_type: "uint",
       default: 0,
     },
     secondary: {
       id: "secondary",
-      label: "Secondary Weapon Count",
+      label: "Secondary Weapons",
       type: "number",
       num_type: "uint",
       default: 0,
     },
     lances: {
       id: "lances",
-      label: "Lance-like Weapon Count",
+      label: "Lance Weapons",
       type: "number",
       num_type: "uint",
       default: 0,
     },
     pdc: {
       id: "pdc",
-      label: "PDC-like Weapon Count",
+      label: "PDC Count",
       type: "number",
       num_type: "uint",
       default: 0,
     },
     torpedoes: {
       id: "torpedoes",
-      label: "Torpedo/Missile Count",
+      label: "Torpedo Tubes",
       type: "number",
       num_type: "uint",
       default: 0,
     },
     shield: {
       id: "shield",
-      label: "Has a Shield",
+      label: "Shield Generator",
       type: "bool",
       default: false,
     },
     stealth: {
       id: "stealth",
-      label: "Has Stealth",
+      label: "Stealth Systems",
       type: "bool",
       default: false,
     },
     systems: {
       id: "systems",
-      label: "Additional systems",
+      label: "Auxiliary Systems",
       type: "number",
       num_type: "uint",
       default: 0,
     },
     engines: {
       id: "engines",
-      label: "Engines (format: '4S 2M 1L')",
+      label: "Engines (e.g., '4S 2M 1L')",
       type: "text",
       default: "0",
     },
     ftl: {
       id: "ftl",
-      label: "FTL Type",
+      label: "FTL Drive",
       type: "select",
       options: ftlTypes,
       default: "NONE",
     },
     cargo: {
       id: "cargo",
-      label: "Cargo Space (1 unit per meter)",
+      label: "Cargo (m³)",
       type: "number",
       num_type: "ufloat",
       default: 0,
     },
-    drone: { id: "drone", label: "Is a drone", type: "bool", default: false },
+    drone: {
+      id: "drone",
+      label: "Drone Automation",
+      type: "bool",
+      default: false,
+    },
+    boat: { id: "boat", label: "Surface Vessel", type: "bool", default: false },
     other: {
       id: "other",
-      label: "Other Costs",
+      label: "Misc Costs",
       type: "number",
       num_type: "ufloat",
       default: 0,
     },
-    boat: { id: "boat", label: "Is a boat", type: "bool", default: false },
   };
 
   const handleChange = (id, value) => {
@@ -134,6 +197,7 @@ const ShipCalculator = () => {
       boat = false,
     } = processedValues;
 
+    // --- Calculation Logic (Preserved) ---
     // ER calculation
     const ftlModifier = ftl === "NONE" ? 0 : 1500;
     const lCost = length * (24 + (stealth ? 2 : 0) + ftlModifier);
@@ -280,28 +344,30 @@ const ShipCalculator = () => {
       cs_upkeep: Math.ceil((csTotal * multiplier) / 6),
     });
   };
-  const handleRate = () => {
-    if (userName.trim()) {
-      setShowRegister(true);
-    }
-  };
 
-  const handleRegister = () => {
-    // Here you would normally submit to a backend
-    alert(`Ship rated and registered for ${userName}!`);
-    setShowRegister(false);
+  const handleRegisterSubmit = () => {
+    if (vehicleName.trim() && result && onRegister) {
+      onRegister({
+        name: vehicleName,
+        domain: "Ship",
+        cost: result.er,
+        data: values,
+      });
+      setVehicleName("");
+      setResult(null);
+    }
   };
 
   return (
     <div className="rate-calculator">
       <div className="calculator-header">
-        <h2>🚢 Ship Rate Calculator</h2>
-        <p>Calculate the cost and resources needed for your ship design</p>
+        <h2>ship rater</h2>
+        <p>Ship Design & Costing</p>
       </div>
 
       <div className="calculator-grid">
         {Object.values(params).map((param) => (
-          <InputField
+          <TechInput
             key={param.id}
             param={param}
             value={values[param.id]}
@@ -311,12 +377,12 @@ const ShipCalculator = () => {
       </div>
 
       <button className="calculate-btn" onClick={calculateRate}>
-        Calculate Ship Cost
+        CALCULATE
       </button>
 
       {result && (
         <div className="result-section">
-          <h3>Calculation Results</h3>
+          <h3>RESULT</h3>
           <div className="result-grid">
             <div className="result-item">
               <span className="result-label">ER</span>
@@ -334,30 +400,28 @@ const ShipCalculator = () => {
               <span className="result-label">CS</span>
               <span className="result-value">{result.cs.toLocaleString()}</span>
             </div>
-            <div className="result-item">
-              <span className="result-label">CS Upkeep</span>
-              <span className="result-value">
-                {result.cs_upkeep.toLocaleString()}
-              </span>
-            </div>
           </div>
         </div>
       )}
 
-      <div className="name-section">
-        <input
-          type="text"
-          placeholder="Enter vehicle name"
-          value={userName}
-          onChange={(e) => setUserName(e.target.value)}
-          className="name-input"
-        />
-        {result && userName.trim() && (
-          <button className="register-btn" onClick={handleRegister}>
-            Register
+      {result && (
+        <div className="name-section">
+          <input
+            type="text"
+            className="name-input"
+            placeholder="SHIP NAME / CLASS..."
+            value={vehicleName}
+            onChange={(e) => setVehicleName(e.target.value)}
+          />
+          <button
+            className="register-btn"
+            onClick={handleRegisterSubmit}
+            disabled={!vehicleName.trim()}
+          >
+            REGISTER
           </button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 };

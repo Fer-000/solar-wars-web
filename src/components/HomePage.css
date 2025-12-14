@@ -1,208 +1,291 @@
+/* --- Variables for Easy Theming --- */
+:root {
+  --color-primary: #00f3ff;       /* Cyan */
+  --color-primary-dim: rgba(0, 243, 255, 0.1);
+  --color-referee: #ff2a2a;       /* Red */
+  --color-referee-dim: rgba(255, 42, 42, 0.1);
+  --color-bg: #050508;
+  --color-panel: rgba(10, 15, 20, 0.75);
+  --font-tech: 'Courier New', monospace; /* Use a better font like 'Orbitron' or 'Rajdhani' if available */
+}
+
+/* --- Layout & Background --- */
 .homepage {
   position: relative;
   min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 2rem;
-  overflow-x: hidden;
+  background-color: var(--color-bg);
+  overflow: hidden;
+  font-family: var(--font-tech);
+  transition: all 0.5s ease;
+}
+
+/* Subtle grid overlay for tech feel */
+.grid-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-image: 
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 50px 50px;
+  pointer-events: none;
+  z-index: 1;
 }
 
 .homepage-content {
-  text-align: center;
   z-index: 10;
-  max-width: 500px;
-  width: 100%;
+  max-width: 480px;
+  width: 90%;
   position: relative;
 }
 
+/* --- Typography --- */
 .title-section {
-  margin-bottom: 3rem;
+  text-align: center;
+  margin-bottom: 2rem;
+  position: relative;
 }
 
 .title-section h1 {
   font-size: 4rem;
-  margin: 0 0 1rem 0;
-  background: linear-gradient(45deg, #646cff, #61dafb, #ffd700);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  text-shadow: 0 0 30px rgba(100, 108, 255, 0.3);
-  animation: glow 2s ease-in-out infinite alternate;
+  margin: 0;
+  letter-spacing: 8px;
+  color: #fff;
+  text-shadow: 0 0 10px var(--color-primary);
+  text-transform: uppercase;
+  transition: text-shadow 0.3s ease;
+}
+
+/* The scanning line under the title */
+.scan-line {
+  height: 2px;
+  width: 100%;
+  background: linear-gradient(90deg, transparent, var(--color-primary), transparent);
+  margin: 10px 0;
+  opacity: 0.8;
 }
 
 .subtitle {
-  font-size: 1.2rem;
-  color: rgba(255, 255, 255, 0.8);
-  margin: 0;
-  font-weight: 300;
+  font-size: 0.9rem;
+  color: var(--color-primary);
+  letter-spacing: 2px;
+  opacity: 0.8;
+  font-weight: bold;
 }
 
+/* --- The Tech Card --- */
+.card-container {
+  background: var(--color-panel);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 3rem 2rem;
+  position: relative;
+  /* Cut corners shape */
+  clip-path: polygon(
+    20px 0, 100% 0, 
+    100% calc(100% - 20px), calc(100% - 20px) 100%, 
+    0 100%, 0 20px
+  );
+  box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+  transition: box-shadow 0.3s ease;
+}
+
+/* Corner Markers (Decorative bits) */
+.corner-marker {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--color-primary);
+  opacity: 0.5;
+  transition: border-color 0.3s ease;
+}
+.top-left { top: 0; left: 0; border-right: none; border-bottom: none; }
+.top-right { top: 0; right: 0; border-left: none; border-bottom: none; }
+.bottom-left { bottom: 0; left: 0; border-right: none; border-top: none; }
+.bottom-right { bottom: 0; right: 0; border-left: none; border-top: none; }
+
+/* --- Form Elements --- */
 .login-form {
-  background: rgba(20, 20, 30, 0.8);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(100, 108, 255, 0.2);
-  border-radius: 16px;
-  padding: 2.5rem;
-  margin-bottom: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.form-header h3 {
+  margin: 0 0 1rem 0;
+  color: var(--color-referee);
+  text-align: center;
+  letter-spacing: 2px;
+  font-size: 1rem;
+  border-bottom: 1px solid var(--color-referee-dim);
+  padding-bottom: 0.5rem;
 }
 
 .input-group {
-  margin-bottom: 1.5rem;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  text-align: left;
 }
 
-.nation-input {
-  width: 100%;
-  padding: 1rem;
+.input-group label {
+  font-size: 0.7rem;
+  color: #888;
+  margin-bottom: 5px;
+  letter-spacing: 1px;
+  margin-left: 5px;
+}
+
+.tech-input {
+  background: rgba(0, 0, 0, 0.3);
+  border: none;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  padding: 12px;
   font-size: 1.1rem;
-  background: rgba(40, 40, 50, 0.8);
-  border: 1px solid rgba(100, 108, 255, 0.3);
-  border-radius: 8px;
-  color: #ffffff;
-  text-align: center;
+  font-family: var(--font-tech);
+  letter-spacing: 1px;
   transition: all 0.3s ease;
+  width: 100%;
   box-sizing: border-box;
 }
 
-.nation-input::placeholder {
-  color: rgba(255, 255, 255, 0.5);
-}
-
-.nation-input:focus {
+.tech-input:focus {
   outline: none;
-  border-color: #646cff;
-  box-shadow: 0 0 0 2px rgba(100, 108, 255, 0.2);
-  background: rgba(40, 40, 50, 0.9);
+  background: rgba(0, 243, 255, 0.05);
+  border-bottom-color: var(--color-primary);
+  padding-left: 20px; /* Slide text on focus */
 }
 
-.enter-button {
+/* Animated bar under input */
+.input-highlight {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  width: 0;
+  background-color: var(--color-primary);
+  transition: width 0.3s ease;
+}
+.tech-input:focus ~ .input-highlight {
   width: 100%;
-  padding: 1rem 2rem;
-  font-size: 1.1rem;
-  font-weight: 600;
-  background: linear-gradient(45deg, #646cff, #61dafb);
+}
+
+/* --- Buttons --- */
+.button-row {
+  display: flex;
+  gap: 1rem;
+}
+
+.tech-button {
   border: none;
-  border-radius: 8px;
-  color: #ffffff;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-
-.enter-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(100, 108, 255, 0.4);
-}
-
-.enter-button:active {
-  transform: translateY(0);
-}
-
-.info-section {
-  color: rgba(255, 255, 255, 0.6);
+  padding: 1rem 1.5rem;
+  font-family: var(--font-tech);
+  font-weight: bold;
   font-size: 0.9rem;
+  letter-spacing: 1px;
+  cursor: pointer;
+  position: relative;
+  /* Angled Button Shape */
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+  transition: all 0.2s ease;
+  text-transform: uppercase;
 }
 
-.referee-form {
-  /* Inherits all login-form styles */
+.tech-button.full-width {
+  width: 100%;
 }
 
-.referee-title {
-  color: #ff6b6b;
-  font-size: 1.2rem;
-  font-weight: 600;
-  margin-bottom: 1.5rem;
-  text-align: center;
-  text-shadow: 0 2px 4px rgba(255, 107, 107, 0.3);
+.tech-button.primary {
+  background: var(--color-primary);
+  color: #000;
+  box-shadow: 0 0 15px var(--color-primary-dim);
 }
 
-.referee-enter {
-  background: linear-gradient(135deg, #ff6b6b, #ee5a24);
-  box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
-}
-
-.referee-enter:hover:not(:disabled) {
-  background: linear-gradient(135deg, #ee5a24, #ff6b6b);
-  box-shadow: 0 6px 20px rgba(255, 107, 107, 0.4);
+.tech-button.primary:hover:not(:disabled) {
+  background: #fff;
+  box-shadow: 0 0 25px var(--color-primary);
   transform: translateY(-2px);
 }
 
-.back-button-ref {
-  width: 100%;
-  padding: 12px;
-  background: linear-gradient(135deg, #666, #555);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  margin-top: 12px;
-  transition: all 0.3s ease;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+.tech-button.secondary {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #aaa;
+  flex: 1;
 }
 
-.back-button-ref:hover:not(:disabled) {
-  background: linear-gradient(135deg, #777, #666);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+.tech-button.secondary:hover {
+  border-color: #fff;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.05);
 }
 
-.back-button-ref:disabled {
-  opacity: 0.6;
+.tech-button:disabled {
+  opacity: 0.5;
   cursor: not-allowed;
+  filter: grayscale(1);
 }
 
-/* Update info section for referee mode */
-.info-section p {
-  transition: all 0.3s ease;
+/* --- Footer Stats --- */
+.status-footer {
+  margin-top: 2rem;
+  display: flex;
+  justify-content: space-between;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 1rem;
+  font-size: 0.75rem;
 }
 
-@keyframes glow {
-  from {
-    text-shadow: 0 0 20px rgba(100, 108, 255, 0.3);
-  }
-  to {
-    text-shadow: 0 0 30px rgba(100, 108, 255, 0.6), 0 0 40px rgba(97, 218, 251, 0.3);
-  }
+.status-item {
+  display: flex;
+  gap: 0.5rem;
 }
 
-/* Mobile responsive */
-@media (max-width: 768px) {
-  .homepage {
-    padding: 1rem;
-  }
-  
-  .title-section h1 {
-    font-size: 3rem;
-  }
-  
-  .subtitle {
-    font-size: 1rem;
-  }
-  
-  .login-form {
-    padding: 2rem;
-  }
-  
-  .nation-input,
-  .enter-button {
-    font-size: 1rem;
-  }
+.status-label {
+  color: #666;
 }
 
-@media (max-width: 480px) {
-  .title-section h1 {
-    font-size: 2.5rem;
-  }
-  
-  .login-form {
-    padding: 1.5rem;
-  }
-  
-  .nation-input,
-  .enter-button {
-    padding: 0.875rem;
-  }
+.status-value {
+  color: var(--color-primary);
+  font-weight: bold;
+}
+.status-value.pending { color: #f5a623; }
+.status-value.ready { color: #2ecc71; }
+
+/* =========================================
+   REFEREE MODE (RED THEME)
+   ========================================= */
+.homepage.mode-referee {
+  /* Override Variables */
+  --color-primary: #ff2a2a; 
+  --color-primary-dim: rgba(255, 42, 42, 0.2);
+}
+
+/* Specific Referee Overrides */
+.mode-referee .scan-line {
+  background: linear-gradient(90deg, transparent, #ff2a2a, transparent);
+}
+
+.mode-referee .subtitle {
+  color: #ff2a2a;
+  animation: blink 2s infinite;
+}
+
+.mode-referee .tech-input:focus {
+  background: rgba(255, 42, 42, 0.05);
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .title-section h1 { font-size: 2.5rem; }
+  .card-container { padding: 2rem 1.5rem; }
+  .button-row { flex-direction: column-reverse; }
 }

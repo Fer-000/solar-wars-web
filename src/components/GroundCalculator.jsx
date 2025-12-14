@@ -1,12 +1,70 @@
 import React, { useState } from "react";
-import InputField from "./InputField";
 import "./RateCalculator.css";
 
-const GroundCalculator = () => {
+// Helper Component
+const TechInput = ({ param, value, onChange }) => {
+  const handleChange = (e) => {
+    const val =
+      param.type === "bool"
+        ? e.target.checked
+        : param.num_type === "uint" || param.num_type === "ufloat"
+        ? parseFloat(e.target.value) || 0
+        : e.target.value;
+    onChange(param.id, val);
+  };
+
+  if (param.type === "bool") {
+    return (
+      <div className="input-group">
+        <label className="tech-checkbox-wrapper">
+          <span className="input-label">{param.label}</span>
+          <input
+            type="checkbox"
+            className="tech-checkbox"
+            checked={!!value}
+            onChange={handleChange}
+          />
+        </label>
+      </div>
+    );
+  }
+
+  if (param.type === "select") {
+    return (
+      <div className="input-group">
+        <label className="input-label">{param.label}</label>
+        <select
+          className="tech-select"
+          value={value || param.default}
+          onChange={handleChange}
+        >
+          {Object.entries(param.options).map(([optKey, optLabel]) => (
+            <option key={optKey} value={optKey}>
+              {optLabel}
+            </option>
+          ))}
+        </select>
+      </div>
+    );
+  }
+
+  return (
+    <div className="input-group">
+      <label className="input-label">{param.label}</label>
+      <input
+        type={param.type === "number" ? "number" : "text"}
+        className="tech-input"
+        value={value ?? param.default}
+        onChange={handleChange}
+      />
+    </div>
+  );
+};
+
+const GroundCalculator = ({ nationName, onRegister }) => {
   const [values, setValues] = useState({});
   const [result, setResult] = useState(null);
-  const [userName, setUserName] = useState("");
-  const [showRegister, setShowRegister] = useState(false);
+  const [vehicleName, setVehicleName] = useState("");
 
   const armorOptions = {
     none: "None",
@@ -25,21 +83,21 @@ const GroundCalculator = () => {
   const params = {
     length: {
       id: "length",
-      label: "Length",
+      label: "Length (m)",
       type: "number",
       num_type: "ufloat",
       default: 10,
     },
     armor: {
       id: "armor",
-      label: "Armor",
+      label: "Chassis Armor",
       type: "select",
       options: armorOptions,
       default: "none",
     },
     protection: {
       id: "protection",
-      label: "Protection",
+      label: "Active Protection",
       type: "select",
       options: protectionOptions,
       default: "none",
@@ -67,15 +125,20 @@ const GroundCalculator = () => {
     },
     rocket: {
       id: "rocket",
-      label: "Rocket Weapons",
+      label: "Rocket Systems",
       type: "number",
       num_type: "uint",
       default: 0,
     },
-    shield: { id: "shield", label: "Shield", type: "bool", default: false },
+    shield: {
+      id: "shield",
+      label: "Shield Gen.",
+      type: "bool",
+      default: false,
+    },
     systems: {
       id: "systems",
-      label: "Systems",
+      label: "Auxiliary Systems",
       type: "number",
       num_type: "uint",
       default: 0,
@@ -113,9 +176,9 @@ const GroundCalculator = () => {
       shield = false,
     } = values;
 
+    // --- Calculation Logic (Preserved) ---
     // ER calculation
     const weaponSystemCost = heavy > 0 ? 7 : medium > 0 ? 3 : 0;
-
     const lengthCostER =
       Math.pow(length, 2) / (armorCosts[armor].ER - weaponSystemCost);
     const heavyCostER = heavy * 0.9;
@@ -195,7 +258,6 @@ const GroundCalculator = () => {
     // CS calculation
     const CSCostID =
       heavy > 0 || rocket > 0 ? 4 : medium > 0 ? 3 : light > 0 ? 2 : 1;
-
     const lengthCostCS =
       CSCostID === 4 || armorCosts[armor].CS === 4
         ? 50
@@ -204,7 +266,6 @@ const GroundCalculator = () => {
         : CSCostID === 2 || armorCosts[armor].CS === 2
         ? 15
         : 10;
-
     const systemCostCS = systems * 2.5;
     const csTotal = Math.ceil(
       Math.ceil(
@@ -221,27 +282,29 @@ const GroundCalculator = () => {
     });
   };
 
-  const handleRate = () => {
-    if (userName.trim()) {
-      setShowRegister(true);
+  const handleRegisterSubmit = () => {
+    if (vehicleName.trim() && result && onRegister) {
+      onRegister({
+        name: vehicleName,
+        domain: "Ground",
+        cost: result.er,
+        data: values,
+      });
+      setVehicleName("");
+      setResult(null);
     }
-  };
-
-  const handleRegister = () => {
-    alert(`Ground vehicle rated and registered for ${userName}!`);
-    setShowRegister(false);
   };
 
   return (
     <div className="rate-calculator">
       <div className="calculator-header">
-        <h2>🚗 Ground Vehicle Rate Calculator</h2>
-        <p>Calculate the cost and resources for your ground vehicles</p>
+        <h2>GROUND RATER</h2>
+        <p>Vehicle Chassis Analysis</p>
       </div>
 
       <div className="calculator-grid">
         {Object.values(params).map((param) => (
-          <InputField
+          <TechInput
             key={param.id}
             param={param}
             value={values[param.id]}
@@ -251,12 +314,12 @@ const GroundCalculator = () => {
       </div>
 
       <button className="calculate-btn" onClick={calculateRate}>
-        Calculate Ground Vehicle Cost
+        CALCULATE COST
       </button>
 
       {result && (
         <div className="result-section">
-          <h3>Calculation Results</h3>
+          <h3>RESULT</h3>
           <div className="result-grid">
             <div className="result-item">
               <span className="result-label">ER</span>
@@ -274,30 +337,28 @@ const GroundCalculator = () => {
               <span className="result-label">CS</span>
               <span className="result-value">{result.cs.toLocaleString()}</span>
             </div>
-            <div className="result-item">
-              <span className="result-label">CS Upkeep</span>
-              <span className="result-value">
-                {result.cs_upkeep.toLocaleString()}
-              </span>
-            </div>
           </div>
         </div>
       )}
 
-      <div className="name-section">
-        <input
-          type="text"
-          placeholder="Enter vehicle name"
-          value={userName}
-          onChange={(e) => setUserName(e.target.value)}
-          className="name-input"
-        />
-        {result && userName.trim() && (
-          <button className="register-btn" onClick={handleRegister}>
-            Register
+      {result && (
+        <div className="name-section">
+          <input
+            type="text"
+            className="name-input"
+            placeholder="VEHICLE DESIGNATION..."
+            value={vehicleName}
+            onChange={(e) => setVehicleName(e.target.value)}
+          />
+          <button
+            className="register-btn"
+            onClick={handleRegisterSubmit}
+            disabled={!vehicleName.trim()}
+          >
+            REGISTER
           </button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 };

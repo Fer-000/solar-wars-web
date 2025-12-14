@@ -1,12 +1,73 @@
 import React, { useState } from "react";
-import InputField from "./InputField";
 import "./RateCalculator.css";
 
-const InfantryCalculator = () => {
+// Helper Component to render specific input types with new styling
+const TechInput = ({ param, value, onChange }) => {
+  const handleChange = (e) => {
+    const val =
+      param.type === "bool"
+        ? e.target.checked
+        : param.num_type === "uint"
+        ? parseInt(e.target.value) || 0
+        : e.target.value;
+    onChange(param.id, val);
+  };
+
+  if (param.type === "bool") {
+    return (
+      <div className="input-group">
+        <label className="tech-checkbox-wrapper">
+          <span className="input-label">{param.label}</span>
+          <input
+            type="checkbox"
+            className="tech-checkbox"
+            checked={!!value}
+            onChange={handleChange}
+          />
+        </label>
+      </div>
+    );
+  }
+
+  if (param.type === "select") {
+    return (
+      <div className="input-group">
+        <label className="input-label">{param.label}</label>
+        <select
+          className="tech-select"
+          value={value || param.default}
+          onChange={handleChange}
+        >
+          {Object.entries(param.options).map(([optKey, optLabel]) => (
+            <option key={optKey} value={optKey}>
+              {optLabel}
+            </option>
+          ))}
+        </select>
+      </div>
+    );
+  }
+
+  // Number or Text
+  return (
+    <div className="input-group">
+      <label className="input-label">{param.label}</label>
+      <input
+        type={param.type === "number" ? "number" : "text"}
+        className="tech-input"
+        value={value ?? param.default}
+        onChange={handleChange}
+        min={param.range?.min}
+        max={param.range?.max}
+      />
+    </div>
+  );
+};
+
+const InfantryCalculator = ({ nationName, onRegister }) => {
   const [values, setValues] = useState({});
   const [result, setResult] = useState(null);
-  const [userName, setUserName] = useState("");
-  const [showRegister, setShowRegister] = useState(false);
+  const [vehicleName, setVehicleName] = useState("");
 
   const speciesOptions = {
     human: "Human",
@@ -41,7 +102,7 @@ const InfantryCalculator = () => {
   const params = {
     species: {
       id: "species",
-      label: "Species of combatants",
+      label: "Species",
       type: "select",
       options: speciesOptions,
       default: "human",
@@ -55,40 +116,21 @@ const InfantryCalculator = () => {
     },
     primary: {
       id: "primary",
-      label: "Primary weapon",
+      label: "Primary Weapon",
       type: "select",
       options: primaryWeaponOptions,
       default: "assaultrifle",
     },
-    special_forces: {
-      id: "special_forces",
-      label: "Special forces",
-      type: "bool",
-      default: false,
-    },
-    chemical_adaptations: {
-      id: "chemical_adaptations",
-      label: "Chemical adaptations",
-      type: "number",
-      num_type: "uint",
-      default: 0,
-    },
-    physical_adaptations: {
-      id: "physical_adaptations",
-      label: "Physical adaptations",
-      type: "number",
-      num_type: "uint",
-      default: 0,
-    },
-    power_suit: {
-      id: "power_suit",
-      label: "Power suit",
-      type: "bool",
-      default: false,
+    secondary: {
+      id: "secondary",
+      label: "Secondary Weapon",
+      type: "select",
+      options: secondaryWeaponOptions,
+      default: "none",
     },
     armor: {
       id: "armor",
-      label: "Armor rating (0-10)",
+      label: "Armor Rating (0-10)",
       type: "number",
       num_type: "uint",
       range: { min: 0, max: 10 },
@@ -100,12 +142,6 @@ const InfantryCalculator = () => {
       type: "select",
       options: camoOptions,
       default: "none",
-    },
-    shield: {
-      id: "shield",
-      label: "Shielding device",
-      type: "bool",
-      default: false,
     },
     grenades: {
       id: "grenades",
@@ -128,16 +164,41 @@ const InfantryCalculator = () => {
       num_type: "uint",
       default: 0,
     },
-    secondary: {
-      id: "secondary",
-      label: "Secondary weapon",
-      type: "select",
-      options: secondaryWeaponOptions,
-      default: "none",
+    special_forces: {
+      id: "special_forces",
+      label: "Special Forces Training",
+      type: "bool",
+      default: false,
+    },
+    power_suit: {
+      id: "power_suit",
+      label: "Power Suit",
+      type: "bool",
+      default: false,
+    },
+    shield: {
+      id: "shield",
+      label: "Shielding Device",
+      type: "bool",
+      default: false,
+    },
+    chemical_adaptations: {
+      id: "chemical_adaptations",
+      label: "Chem. Adaptations",
+      type: "number",
+      num_type: "uint",
+      default: 0,
+    },
+    physical_adaptations: {
+      id: "physical_adaptations",
+      label: "Phys. Adaptations",
+      type: "number",
+      num_type: "uint",
+      default: 0,
     },
     other: {
       id: "other",
-      label: "Other costs",
+      label: "Misc. Costs",
       type: "number",
       num_type: "uint",
       default: 0,
@@ -167,9 +228,10 @@ const InfantryCalculator = () => {
       other = 0,
     } = values;
 
+    // --- Calculation Logic (Preserved) ---
     const bodyCost = species === "human" ? 10 : 100;
-    const trainCost = training_time * 0; // Training cost equals zero
-    const specialCost = special_forces ? 1.1 : 1.0; // Special forces 10% more expensive
+    const trainCost = training_time * 0;
+    const specialCost = special_forces ? 1.1 : 1.0;
     const chemicalCost = chemical_adaptations * 15;
     const physicalCost = physical_adaptations * 25;
     const powersuitCost = power_suit ? 50 : 0;
@@ -184,35 +246,23 @@ const InfantryCalculator = () => {
         : 0;
     const shieldCost = shield ? 5 : 0;
 
-    // Armament
     const grenadeCost = grenades * 0.05;
     const missileCost = missiles * 5;
     const rocketCost = rockets * 1;
-    const primaryCost =
-      primary === "assaultrifle"
-        ? 1
-        : primary === "machinegun"
-        ? 50
-        : primary === "sniperrifle"
-        ? 1
-        : primary === "sword"
-        ? 15
-        : primary === "staff"
-        ? 30
-        : 0;
-    const secondaryCost =
-      secondary === "pistol"
-        ? 0.5
-        : secondary === "shotgun"
-        ? 0.675
-        : secondary === "rocketlauncher"
-        ? 15
-        : secondary === "missilelauncher"
-        ? 125
-        : secondary === "knife"
-        ? 0.05
-        : 0;
-    const otherCost = other;
+
+    let primaryCost = 0;
+    if (primary === "assaultrifle") primaryCost = 1;
+    else if (primary === "machinegun") primaryCost = 50;
+    else if (primary === "sniperrifle") primaryCost = 1;
+    else if (primary === "sword") primaryCost = 15;
+    else if (primary === "staff") primaryCost = 30;
+
+    let secondaryCost = 0;
+    if (secondary === "pistol") secondaryCost = 0.5;
+    else if (secondary === "shotgun") secondaryCost = 0.675;
+    else if (secondary === "rocketlauncher") secondaryCost = 15;
+    else if (secondary === "missilelauncher") secondaryCost = 125;
+    else if (secondary === "knife") secondaryCost = 0.05;
 
     const totalCost =
       (bodyCost +
@@ -229,37 +279,38 @@ const InfantryCalculator = () => {
         missileCost +
         primaryCost +
         secondaryCost +
-        otherCost) *
+        other) *
       specialCost;
 
     setResult({
       time: training_time,
-      er: Math.ceil(totalCost * 1000), // Convert to appropriate scale
+      er: Math.ceil(totalCost * 1000),
     });
   };
 
-  const handleRate = () => {
-    if (userName.trim()) {
-      setShowRegister(true);
+  const handleRegisterSubmit = () => {
+    if (vehicleName.trim() && result && onRegister) {
+      onRegister({
+        name: vehicleName,
+        domain: "Infantry",
+        cost: result.er,
+        data: values,
+      });
+      setVehicleName(""); // Reset after submit
+      setResult(null); // Optional: Reset result
     }
-  };
-
-  const handleRegister = () => {
-    // Here you would normally submit to a backend
-    alert(`Infantry unit rated and registered for ${userName}!`);
-    setShowRegister(false);
   };
 
   return (
     <div className="rate-calculator">
       <div className="calculator-header">
-        <h2>🪖 Infantry Rate Calculator</h2>
-        <p>Calculate the cost and training time for your infantry units</p>
+        <h2>INFANTRY RATER</h2>
+        <p>Unit Specifications & Cost Analysis</p>
       </div>
 
       <div className="calculator-grid">
         {Object.values(params).map((param) => (
-          <InputField
+          <TechInput
             key={param.id}
             param={param}
             value={values[param.id]}
@@ -269,39 +320,43 @@ const InfantryCalculator = () => {
       </div>
 
       <button className="calculate-btn" onClick={calculateRate}>
-        Calculate Infantry Cost
+        CALCULATE COST
       </button>
 
       {result && (
         <div className="result-section">
-          <h3>📊 Calculation Results</h3>
+          <h3>RESULT</h3>
           <div className="result-grid">
             <div className="result-item">
-              <span className="result-label">Training Time</span>
-              <span className="result-value">{result.time} months</span>
+              <span className="result-label">ESTIMATED TRAINING</span>
+              <span className="result-value">{result.time} MO</span>
             </div>
             <div className="result-item">
-              <span className="result-label">Energy Resources (ER)</span>
+              <span className="result-label">ER</span>
               <span className="result-value">{result.er.toLocaleString()}</span>
             </div>
           </div>
         </div>
       )}
 
-      <div className="name-section">
-        <input
-          type="text"
-          placeholder="Enter vehicle name"
-          value={userName}
-          onChange={(e) => setUserName(e.target.value)}
-          className="name-input"
-        />
-        {result && userName.trim() && (
-          <button className="register-btn" onClick={handleRegister}>
-            Register
+      {result && (
+        <div className="name-section">
+          <input
+            type="text"
+            className="name-input"
+            placeholder="ENTER UNIT DESIGNATION..."
+            value={vehicleName}
+            onChange={(e) => setVehicleName(e.target.value)}
+          />
+          <button
+            className="register-btn"
+            onClick={handleRegisterSubmit}
+            disabled={!vehicleName.trim()}
+          >
+            REGISTER
           </button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 };

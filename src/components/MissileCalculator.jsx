@@ -1,12 +1,72 @@
 import React, { useState } from "react";
-import InputField from "./InputField";
 import "./RateCalculator.css";
 
-const MissileCalculator = () => {
+// Reusable TechInput component (can be moved to a separate file later)
+const TechInput = ({ param, value, onChange }) => {
+  const handleChange = (e) => {
+    const val =
+      param.type === "bool"
+        ? e.target.checked
+        : param.num_type === "uint" || param.num_type === "ufloat"
+        ? parseFloat(e.target.value) || 0
+        : e.target.value;
+    onChange(param.id, val);
+  };
+
+  if (param.type === "bool") {
+    return (
+      <div className="input-group">
+        <label className="tech-checkbox-wrapper">
+          <span className="input-label">{param.label}</span>
+          <input
+            type="checkbox"
+            className="tech-checkbox"
+            checked={!!value}
+            onChange={handleChange}
+          />
+        </label>
+      </div>
+    );
+  }
+
+  if (param.type === "select") {
+    return (
+      <div className="input-group">
+        <label className="input-label">{param.label}</label>
+        <select
+          className="tech-select"
+          value={value || param.default}
+          onChange={handleChange}
+        >
+          {Object.entries(param.options).map(([optKey, optLabel]) => (
+            <option key={optKey} value={optKey}>
+              {optLabel}
+            </option>
+          ))}
+        </select>
+      </div>
+    );
+  }
+
+  return (
+    <div className="input-group">
+      <label className="input-label">{param.label}</label>
+      <input
+        type={param.type === "number" ? "number" : "text"}
+        className="tech-input"
+        value={value ?? param.default}
+        onChange={handleChange}
+        min={param.range?.min}
+        max={param.range?.max}
+      />
+    </div>
+  );
+};
+
+const MissileCalculator = ({ nationName, onRegister }) => {
   const [values, setValues] = useState({});
   const [result, setResult] = useState(null);
-  const [userName, setUserName] = useState("");
-  const [showRegister, setShowRegister] = useState(false);
+  const [vehicleName, setVehicleName] = useState("");
 
   const missileTypes = {
     cruise: "Cruise",
@@ -19,7 +79,7 @@ const MissileCalculator = () => {
   const params = {
     length: {
       id: "length",
-      label: "Length",
+      label: "Length (m)",
       num_type: "ufloat",
       type: "number",
       default: 5,
@@ -33,14 +93,14 @@ const MissileCalculator = () => {
     },
     nuclear: {
       id: "nuclear",
-      label: "Nuclear Yield (kilotons)",
+      label: "Nuclear Yield (kT)",
       num_type: "uint",
       type: "number",
       default: 0,
     },
     systems: {
       id: "systems",
-      label: "Systems",
+      label: "Internal Systems",
       num_type: "uint",
       type: "number",
       default: 0,
@@ -95,27 +155,29 @@ const MissileCalculator = () => {
     });
   };
 
-  const handleRate = () => {
-    if (userName.trim()) {
-      setShowRegister(true);
+  const handleRegisterSubmit = () => {
+    if (vehicleName.trim() && result && onRegister) {
+      onRegister({
+        name: vehicleName,
+        domain: "Missile",
+        cost: result.er,
+        data: values,
+      });
+      setVehicleName("");
+      setResult(null);
     }
-  };
-
-  const handleRegister = () => {
-    alert(`Missile rated and registered for ${userName}!`);
-    setShowRegister(false);
   };
 
   return (
     <div className="rate-calculator">
       <div className="calculator-header">
-        <h2>🚀 Missile Rate Calculator</h2>
-        <p>Calculate the cost and resources for your missile systems</p>
+        <h2>MISSILE RATER</h2>
+        <p>Missile Systems Analysis</p>
       </div>
 
       <div className="calculator-grid">
         {Object.values(params).map((param) => (
-          <InputField
+          <TechInput
             key={param.id}
             param={param}
             value={values[param.id]}
@@ -125,53 +187,51 @@ const MissileCalculator = () => {
       </div>
 
       <button className="calculate-btn" onClick={calculateRate}>
-        Calculate Missile Cost
+        CALCULATE COST
       </button>
 
       {result && (
         <div className="result-section">
-          <h3>📊 Calculation Results</h3>
+          <h3>RESULT</h3>
           <div className="result-grid">
             <div className="result-item">
-              <span className="result-label">Energy Resources (ER)</span>
+              <span className="result-label">ER</span>
               <span className="result-value">{result.er.toLocaleString()}</span>
             </div>
             <div className="result-item">
-              <span className="result-label">Common Materials (CM)</span>
+              <span className="result-label">CM</span>
               <span className="result-value">{result.cm.toLocaleString()}</span>
             </div>
             <div className="result-item">
-              <span className="result-label">Rare Elements (EL)</span>
+              <span className="result-label">EL</span>
               <span className="result-value">{result.el.toLocaleString()}</span>
             </div>
             <div className="result-item">
-              <span className="result-label">Specialist Components (CS)</span>
+              <span className="result-label">CS</span>
               <span className="result-value">{result.cs.toLocaleString()}</span>
-            </div>
-            <div className="result-item">
-              <span className="result-label">CS Upkeep</span>
-              <span className="result-value">
-                {result.cs_upkeep.toLocaleString()}
-              </span>
             </div>
           </div>
         </div>
       )}
 
-      <div className="name-section">
-        <input
-          type="text"
-          placeholder="Enter vehicle name"
-          value={userName}
-          onChange={(e) => setUserName(e.target.value)}
-          className="name-input"
-        />
-        {result && userName.trim() && (
-          <button className="register-btn" onClick={handleRegister}>
-            Register
+      {result && (
+        <div className="name-section">
+          <input
+            type="text"
+            className="name-input"
+            placeholder="MISSILE DESIGNATION..."
+            value={vehicleName}
+            onChange={(e) => setVehicleName(e.target.value)}
+          />
+          <button
+            className="register-btn"
+            onClick={handleRegisterSubmit}
+            disabled={!vehicleName.trim()}
+          >
+            REGISTER
           </button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 };

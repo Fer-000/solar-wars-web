@@ -26,7 +26,6 @@ const HomePage = ({ onEnter, loadingDb, dbLoaded }) => {
       return;
     }
 
-    // Pass referee data to parent component
     onEnter("referee", {
       nations: refereeNations
         .split(",")
@@ -46,93 +45,129 @@ const HomePage = ({ onEnter, loadingDb, dbLoaded }) => {
     setNationId("");
   };
 
+  // Dynamic class for theme switching
+  const modeClass = isRefereeMode ? "mode-referee" : "mode-command";
+
   return (
-    <div className="homepage">
+    <div className={`homepage ${modeClass}`}>
       <StarField density={150} />
+
+      {/* Background decoration grid */}
+      <div className="grid-overlay"></div>
+
       <div className="homepage-content">
         <div className="title-section">
-          <h1>Solar Wars</h1>
+          <h1>SOLAR WARS</h1>
+          <div className="scan-line"></div>
           <p className="subtitle">
-            Command Your Nation Across the Solar System
+            {isRefereeMode
+              ? "SYSTEM OVERRIDE: REFEREE ACCESS"
+              : "COMMAND YOUR NATION"}
           </p>
         </div>
 
-        {isRefereeMode ? (
-          <form
-            className="login-form referee-form"
-            onSubmit={handleRefereeSubmit}
-          >
-            <h3 className="referee-title">🎯 Referee Mode</h3>
-            <h4>Please specify the nations and/or worlds to view</h4>
-            <div className="input-group">
-              <input
-                type="text"
-                value={refereeNations}
-                onChange={(e) => setRefereeNations(e.target.value)}
-                placeholder="Nations to view (e.g., athena, milita, kkw)"
-                className="nation-input"
-                disabled={loadingDb}
-              />
-            </div>
+        <div className="card-container">
+          {/* Decorative Corner Markers */}
+          <div className="corner-marker top-left"></div>
+          <div className="corner-marker top-right"></div>
+          <div className="corner-marker bottom-left"></div>
+          <div className="corner-marker bottom-right"></div>
 
-            <div className="input-group">
-              <input
-                type="text"
-                value={refereeWorlds}
-                onChange={(e) => setRefereeWorlds(e.target.value)}
-                placeholder="Worlds to view (e.g., Earth, Mars, Jupiter)"
-                className="nation-input"
-                disabled={loadingDb}
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="enter-button referee-enter"
-              disabled={loadingDb}
+          {isRefereeMode ? (
+            <form
+              className="login-form referee-form"
+              onSubmit={handleRefereeSubmit}
             >
-              {loadingDb ? "Loading Database..." : "Open Referee View"}
-            </button>
+              <div className="form-header">
+                <h3>ACCESS PARAMETERS</h3>
+              </div>
 
-            <button
-              type="button"
-              onClick={handleBackToLogin}
-              className="back-button-ref"
-              disabled={loadingDb}
-            >
-              ← Back to Login
-            </button>
-          </form>
-        ) : (
-          <form className="login-form" onSubmit={handleSubmit}>
-            <div className="input-group">
-              <input
-                type="text"
-                value={nationId}
-                onChange={(e) => setNationId(e.target.value)}
-                placeholder="Enter Nation ID"
-                className="nation-input"
-                required
+              <div className="input-group">
+                <label>TARGET NATIONS</label>
+                <input
+                  type="text"
+                  value={refereeNations}
+                  onChange={(e) => setRefereeNations(e.target.value)}
+                  placeholder="e.g. athena, kkw"
+                  className="tech-input"
+                  disabled={loadingDb}
+                  autoComplete="off"
+                />
+                <div className="input-highlight"></div>
+              </div>
+
+              <div className="input-group">
+                <label>TARGET WORLDS</label>
+                <input
+                  type="text"
+                  value={refereeWorlds}
+                  onChange={(e) => setRefereeWorlds(e.target.value)}
+                  placeholder="e.g. Earth, Mars"
+                  className="tech-input"
+                  disabled={loadingDb}
+                  autoComplete="off"
+                />
+                <div className="input-highlight"></div>
+              </div>
+
+              <div className="button-row">
+                <button
+                  type="button"
+                  onClick={handleBackToLogin}
+                  className="tech-button secondary"
+                  disabled={loadingDb}
+                >
+                  CANCEL
+                </button>
+                <button
+                  type="submit"
+                  className="tech-button primary"
+                  disabled={loadingDb}
+                >
+                  {loadingDb ? "INITIALIZING..." : "EXECUTE"}
+                </button>
+              </div>
+            </form>
+          ) : (
+            <form className="login-form" onSubmit={handleSubmit}>
+              <div className="input-group">
+                <label>IDENTIFICATION CODE</label>
+                <input
+                  type="text"
+                  value={nationId}
+                  onChange={(e) => setNationId(e.target.value)}
+                  placeholder="ENTER NATION ID"
+                  className="tech-input"
+                  required
+                  disabled={loadingDb}
+                  autoComplete="off"
+                  autoFocus
+                />
+                <div className="input-highlight"></div>
+              </div>
+
+              <button
+                type="submit"
+                className="tech-button primary full-width"
                 disabled={loadingDb}
-              />
-            </div>
-            <button type="submit" className="enter-button" disabled={loadingDb}>
-              {loadingDb ? "Loading Database..." : "Enter Command Center"}
-            </button>
-          </form>
-        )}
-
-        <div className="info-section">
-          <p>
-            {isRefereeMode
-              ? "Configure referee view settings to monitor game state"
-              : "Enter your nation ID to access your command center"}
-          </p>
-          {dbLoaded && !loadingDb && (
-            <p style={{ color: "#00f5ff", fontSize: "14px" }}>
-              ✓ Database cached and ready
-            </p>
+              >
+                {loadingDb ? "ESTABLISHING LINK..." : "ENTER COMMAND CENTER"}
+              </button>
+            </form>
           )}
+        </div>
+
+        <div className="status-footer">
+          <div className="status-item">
+            <span className="status-label">SERVER:</span>
+            <span className="status-value">ONLINE</span>
+          </div>
+          <div className="status-item">
+            <span className="status-label">DB_CACHE:</span>
+            <span className={`status-value ${dbLoaded ? "ready" : "pending"}`}>
+              {dbLoaded ? "SYNCED" : "PENDING..."}
+            </span>
+          </div>
         </div>
       </div>
     </div>

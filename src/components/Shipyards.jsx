@@ -5,70 +5,34 @@ import AircraftCalculator from "./AircraftCalculator";
 import GroundCalculator from "./GroundCalculator";
 import MissileCalculator from "./MissileCalculator";
 import InfantryCalculator from "./InfantryCalculator";
-import "./CenterPage.css";
+import databaseService from "../services/database";
 import "./Shipyards.css";
 
 const Shipyards = ({
   onBack,
   nationName,
-  themeColor = "#646cff",
+  themeColor = "#00f3ff",
   dbLoaded,
 }) => {
   if (!dbLoaded) {
     return (
-      <div className="center-page shipyards-page">
-        <div style={{ textAlign: "center", padding: "80px" }}>
-          <h2>Loading database...</h2>
-        </div>
+      <div className="shipyards-container loading-state">
+        <div className="loading-text">SYSTEM INITIALIZING...</div>
       </div>
     );
   }
 
   const [activeCategory, setActiveCategory] = useState(0);
 
+  // Reverted to your friend's custom icons
   const categories = [
-    { id: "ship", name: "Ship", icon: "icons/raters/ship.png" },
-    { id: "aircraft", name: "Aircraft", icon: "icons/raters/air.png" },
-    { id: "ground", name: "Ground", icon: "icons/raters/ground.png" },
-    { id: "missile", name: "Missile", icon: "icons/raters/missile.png" },
-    { id: "infantry", name: "Infantry", icon: "icons/raters/infantry.png" },
-    { id: "platform", name: "Platform", icon: "icons/raters/platform.png" },
+    { id: "ship", name: "SHIPS", icon: "icons/raters/ship.png" },
+    { id: "aircraft", name: "AIR", icon: "icons/raters/air.png" },
+    { id: "ground", name: "GROUND", icon: "icons/raters/ground.png" },
+    { id: "missile", name: "MISSILE", icon: "icons/raters/missile.png" },
+    { id: "infantry", name: "INFANTRY", icon: "icons/raters/infantry.png" },
+    { id: "platform", name: "PLATFORM", icon: "icons/raters/platform.png" },
   ];
-
-  const vehicles = [
-    {
-      name: "Interceptor MK-VII",
-      type: "Fighter",
-      rating: 4.2,
-      status: "Active",
-      category: "ship",
-    },
-    {
-      name: "Titan Hauler",
-      type: "Transport",
-      rating: 3.8,
-      status: "Active",
-      category: "ship",
-    },
-    {
-      name: "Stealth Corvette",
-      type: "Stealth",
-      rating: 4.7,
-      status: "Development",
-      category: "ship",
-    },
-    {
-      name: "Mining Drone X1",
-      type: "Utility",
-      rating: 3.5,
-      status: "Active",
-      category: "aircraft",
-    },
-  ];
-
-  const filteredVehicles = vehicles.filter(
-    (vehicle) => vehicle.category === categories[activeCategory].id
-  );
 
   const nextCategory = () => {
     setActiveCategory((prev) => (prev + 1) % categories.length);
@@ -84,17 +48,16 @@ const Shipyards = ({
     setActiveCategory(index);
   };
 
-  // Registration logic for vehicles, matching bot behavior
   const handleRegisterVehicle = async ({ name, domain, cost, data }) => {
     if (!name || !domain || !cost) return;
-    const databaseService = (await import("../services/database")).default;
-    // Get current faction data
+
     const factionData = await databaseService.getFaction(
       "The Solar Wars",
       nationName
     );
+
     if (!factionData) return alert("Faction not found");
-    // Check for existing vehicle
+
     const vehicles = factionData.Vehicles || [];
     const replaceIdx = vehicles.findIndex((v) => v.name === name);
     const now = new Date();
@@ -103,6 +66,7 @@ const Shipyards = ({
       now.getUTCMonth(),
       now.getUTCDate()
     );
+
     const newVehicle = {
       ID:
         replaceIdx >= 0
@@ -116,6 +80,7 @@ const Shipyards = ({
       data,
       date: today,
     };
+
     let newVehicles;
     if (replaceIdx >= 0) {
       newVehicles = [...vehicles];
@@ -123,6 +88,7 @@ const Shipyards = ({
     } else {
       newVehicles = [...vehicles, newVehicle];
     }
+
     await databaseService.setFaction("The Solar Wars", nationName, {
       Vehicles: newVehicles,
     });
@@ -134,135 +100,97 @@ const Shipyards = ({
   };
 
   const renderCalculator = () => {
+    const commonProps = {
+      nationName,
+      onRegister: handleRegisterVehicle,
+    };
+
     switch (categories[activeCategory].id) {
       case "ship":
-        return (
-          <ShipCalculator
-            nationName={nationName}
-            onRegister={handleRegisterVehicle}
-          />
-        );
+        return <ShipCalculator {...commonProps} />;
       case "aircraft":
-        return (
-          <ShipCalculator
-            nationName={nationName}
-            onRegister={handleRegisterVehicle}
-          />
-        );
+        return <AircraftCalculator {...commonProps} />;
       case "ground":
-        return (
-          <GroundCalculator
-            nationName={nationName}
-            onRegister={handleRegisterVehicle}
-          />
-        );
+        return <GroundCalculator {...commonProps} />;
       case "missile":
-        return (
-          <MissileCalculator
-            nationName={nationName}
-            onRegister={handleRegisterVehicle}
-          />
-        );
+        return <MissileCalculator {...commonProps} />;
       case "infantry":
-        return (
-          <InfantryCalculator
-            nationName={nationName}
-            onRegister={handleRegisterVehicle}
-          />
-        );
+        return <InfantryCalculator {...commonProps} />;
       case "platform":
-        return (
-          <ShipCalculator
-            nationName={nationName}
-            onRegister={handleRegisterVehicle}
-          />
-        ); // Use ship calculator for platforms
+        return <ShipCalculator {...commonProps} />;
       default:
-        return (
-          <ShipCalculator
-            nationName={nationName}
-            onRegister={handleRegisterVehicle}
-          />
-        );
+        return <ShipCalculator {...commonProps} />;
     }
   };
 
   return (
-    <div className="center-page shipyards-page">
-      <StarField density={120} />
-      <div
-        className="blueprint-background"
-        data-category={categories[activeCategory].id}
-      >
-        <div className="blueprint-grid"></div>
-        <div className="blueprint-lines"></div>
-      </div>
-      <div className="center-content">
-        <div className="center-header">
-          <button className="back-button" onClick={onBack}>
-            ← Back to Dashboard
+    <div className="shipyards-container">
+      <div className="grid-overlay"></div>
+      <StarField density={80} />
+
+      <div className="shipyards-content">
+        <div className="shipyards-header">
+          <button className="back-btn" onClick={onBack}>
+            <svg
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3"
+              />
+            </svg>
+            <span>RETURN</span>
           </button>
-          <h1>🏭 Shipyards</h1>
-          <p className="center-subtitle">{nationName} Vehicle Management</p>
+          <h1>SHIPYARDS // {categories[activeCategory].name}</h1>
         </div>
 
-        <div className="center-grid">
-          <div className="center-card full-width">{renderCalculator()}</div>
+        <div className="tech-frame-container">
+          <div className="corner-marker top-left"></div>
+          <div className="corner-marker top-right"></div>
+          <div className="corner-marker bottom-left"></div>
+          <div className="corner-marker bottom-right"></div>
+
+          <div className="calculator-viewport">{renderCalculator()}</div>
         </div>
-      </div>
 
-      {/* Carousel at bottom */}
-      <div className="category-carousel">
-        <button className="carousel-arrow left" onClick={prevCategory}>
-          ←
-        </button>
+        {/* Carousel Bottom Dock */}
+        <div className="carousel-dock">
+          <button className="nav-arrow left" onClick={prevCategory}>
+            &lt;
+          </button>
 
-        <div className="carousel-container">
-          {(() => {
-            const items = [];
-            const prevIdx =
-              (activeCategory - 1 + categories.length) % categories.length;
-            const nextIdx = (activeCategory + 1) % categories.length;
-            // Show prev, active, next
-            [prevIdx, activeCategory, nextIdx].forEach((idx, i) => {
-              const category = categories[idx];
-              const isActive = idx === activeCategory;
-              items.push(
+          <div className="carousel-track">
+            {categories.map((cat, index) => {
+              const isActive = index === activeCategory;
+              const isNeighbor = Math.abs(activeCategory - index) === 1;
+
+              return (
                 <div
-                  key={category.id}
-                  className={`category-item${isActive ? " active" : ""}`}
-                  onClick={() => selectCategory(idx)}
-                  style={{
-                    opacity: isActive ? 1 : 0.6,
-                    transform: isActive ? "scale(1.1)" : "scale(0.95)",
-                    zIndex: isActive ? 2 : 1,
-                    margin: "0 12px",
-                    transition: "all 0.3s",
-                  }}
+                  key={cat.id}
+                  className={`carousel-item ${isActive ? "active" : ""} ${
+                    !isActive && !isNeighbor ? "dimmed" : ""
+                  }`}
+                  onClick={() => selectCategory(index)}
                 >
-                  <div className="category-icon">
-                    {category.icon.endsWith(".png") ? (
-                      <img
-                        src={category.icon}
-                        alt={category.name}
-                        style={{ width: 50, height: 50 }}
-                        className="category-icon-img"
-                      />
-                    ) : (
-                      <span style={{ fontSize: 50 }}>{category.icon}</span>
-                    )}
+                  <div className="cat-icon">
+                    <img src={cat.icon} alt={cat.name} />
                   </div>
-                  <span className="category-name">{category.name}</span>
+                  <div className="cat-label">{cat.name}</div>
                 </div>
               );
-            });
-            return items;
-          })()}
-        </div>
+            })}
+          </div>
 
-        <button className="carousel-arrow right" onClick={nextCategory}>
-          →
-        </button>
+          <button className="nav-arrow right" onClick={nextCategory}>
+            &gt;
+          </button>
+        </div>
       </div>
     </div>
   );
