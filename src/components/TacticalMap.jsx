@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import databaseService from "../services/database";
 import globalDB from "../services/GlobalDB";
+import AnimatedSolarSystem from "./AnimatedSolarSystem";
 import "./TacticalMap.css";
 
 // Add refereeMode prop to component
@@ -27,6 +28,7 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded, refereeMode }) => {
   const [scrollPosition, setScrollPosition] = useState(0);
   const [battleResult, setBattleResult] = useState(null);
   const [selectedPlayerFleetId, setSelectedPlayerFleetId] = useState(null);
+  const [animatedView, setAnimatedView] = useState(true);
 
   // --- PATCH: Add scroll preservation ---
   const mapScrollRef = useRef(null);
@@ -165,6 +167,8 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded, refereeMode }) => {
 
   const selectSystem = async (systemName) => {
     setSelectedSystem(systemName);
+    // Open animated solar map by default when a system is selected
+    setAnimatedView(true);
     setLoading(true);
 
     try {
@@ -660,666 +664,753 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded, refereeMode }) => {
   }
 
   return (
-    <div className="tactical-map-overlay">
-      <div className="tactical-map-container">
-        <div className="tactical-map-header">
-          <h2>
-            🗺️ Tactical Map
-            {refereeMode?.isReferee && (
-              <span
-                style={{
-                  color: "#ff6b6b",
-                  marginLeft: "8px",
-                  fontSize: "14px",
-                }}
-              >
-                (REFEREE MODE)
-              </span>
+    <>
+      {/* Fullscreen Animated View (when enabled) */}
+      {selectedSystem && animatedView && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            width: "100vw",
+            height: "100vh",
+            zIndex: 9999,
+            background: "#050505",
+          }}
+        >
+          <AnimatedSolarSystem
+            systemName={selectedSystem}
+            onWorldClick={handleZoomIn}
+            onFleetClick={openFleetModal}
+            fleetsAtWorld={Object.entries(systemData).reduce(
+              (acc, [factionName, fleets]) => {
+                fleets.forEach((fleet) => {
+                  const location = fleet.State?.Location;
+                  if (
+                    location &&
+                    solarSystems[selectedSystem].includes(location)
+                  ) {
+                    if (!acc[location]) acc[location] = [];
+                    acc[location].push({ ...fleet, factionName });
+                  }
+                });
+                return acc;
+              },
+              {}
             )}
-          </h2>
-          <button className="close-btn" onClick={onClose}>
-            ✕
-          </button>
+            getFactionColor={getFactionColor}
+            onClose={onClose}
+            refereeMode={refereeMode}
+            onBackToSystems={() => setSelectedSystem(null)}
+            onToggleView={() => setAnimatedView(false)}
+            allFactions={allFactions}
+            systemData={systemData}
+            currentFaction={currentFaction}
+          />
         </div>
+      )}
 
-        {/* Zoomed-in planet view */}
-        {zoomedWorld ? (
-          <div
-            className="zoomed-planet-area"
-            style={{
-              display: "flex",
-              flexDirection: "row",
-              minHeight: "400px",
-              overflow: "hidden",
-              position: "relative",
-            }}
-          >
-            {/* Left: Buildings info, scroll bar on left, button at top */}
+      {/* Tactical Map Container */}
+      <div className="tactical-map-overlay">
+        <div className="tactical-map-container">
+          <div className="tactical-map-header">
+            <h2>
+              🗺️ Tactical Map
+              {refereeMode?.isReferee && (
+                <span
+                  style={{
+                    color: "#ff6b6b",
+                    marginLeft: "8px",
+                    fontSize: "14px",
+                  }}
+                >
+                  (REFEREE MODE)
+                </span>
+              )}
+            </h2>
+            <button className="close-btn" onClick={onClose}>
+              ✕
+            </button>
+          </div>
+
+          {/* Zoomed-in planet view */}
+          {zoomedWorld ? (
             <div
+              className="zoomed-planet-area"
               style={{
-                flex: 1,
-                padding: "32px 16px 32px 32px",
-                zIndex: 2,
+                display: "flex",
+                flexDirection: "row",
+                minHeight: "400px",
+                overflow: "hidden",
                 position: "relative",
               }}
             >
-              <button onClick={() => setZoomedWorld(null)}>
-                ← Back to Map
-              </button>
-              <h3 style={{ marginBottom: "16px", marginTop: "48px" }}>
-                {zoomedWorld.name} - Buildings
-              </h3>
+              {/* Left: Buildings info, scroll bar on left, button at top */}
               <div
                 style={{
-                  maxHeight: "550px",
-                  overflowY: "auto",
-                  paddingLeft: "8px",
-                  direction: "rtl",
+                  flex: 1,
+                  padding: "32px 16px 32px 32px",
+                  zIndex: 2,
+                  position: "relative",
                 }}
               >
-                <div style={{ direction: "ltr" }}>
-                  {(() => {
-                    const factionsWithBuildings = Object.entries(
-                      allFactions
-                    ).filter(([factionName, factionData]) => {
-                      // Apply referee filtering for buildings view
-                      if (refereeMode?.isReferee) {
-                        const { nations, worlds: refWorlds } = refereeMode;
+                <button onClick={() => setZoomedWorld(null)}>
+                  ← Back to Map
+                </button>
+                <h3 style={{ marginBottom: "16px", marginTop: "48px" }}>
+                  {zoomedWorld.name} - Buildings
+                </h3>
+                <div
+                  style={{
+                    maxHeight: "550px",
+                    overflowY: "auto",
+                    paddingLeft: "8px",
+                    direction: "rtl",
+                  }}
+                >
+                  <div style={{ direction: "ltr" }}>
+                    {(() => {
+                      const factionsWithBuildings = Object.entries(
+                        allFactions
+                      ).filter(([factionName, factionData]) => {
+                        // Apply referee filtering for buildings view
+                        if (refereeMode?.isReferee) {
+                          const { nations, worlds: refWorlds } = refereeMode;
 
-                        if (refWorlds.length > 0 && nations.length === 0) {
-                          // Show all nations but only on specified worlds
-                          if (!refWorlds.includes(zoomedWorld.name)) {
-                            return false;
-                          }
-                        } else if (
-                          nations.length > 0 &&
-                          refWorlds.length === 0
-                        ) {
-                          // Show only specified nations on all worlds
-                          if (!nations.includes(factionName.toLowerCase())) {
-                            return false;
-                          }
-                        } else if (nations.length > 0 && refWorlds.length > 0) {
-                          // Show specified nations on all worlds + all nations on specified worlds
-                          const isSpecifiedNation = nations.includes(
-                            factionName.toLowerCase()
-                          );
-                          const isSpecifiedWorld = refWorlds.includes(
-                            zoomedWorld.name
-                          );
+                          if (refWorlds.length > 0 && nations.length === 0) {
+                            // Show all nations but only on specified worlds
+                            if (!refWorlds.includes(zoomedWorld.name)) {
+                              return false;
+                            }
+                          } else if (
+                            nations.length > 0 &&
+                            refWorlds.length === 0
+                          ) {
+                            // Show only specified nations on all worlds
+                            if (!nations.includes(factionName.toLowerCase())) {
+                              return false;
+                            }
+                          } else if (
+                            nations.length > 0 &&
+                            refWorlds.length > 0
+                          ) {
+                            // Show specified nations on all worlds + all nations on specified worlds
+                            const isSpecifiedNation = nations.includes(
+                              factionName.toLowerCase()
+                            );
+                            const isSpecifiedWorld = refWorlds.includes(
+                              zoomedWorld.name
+                            );
 
-                          if (!isSpecifiedNation && !isSpecifiedWorld) {
-                            return false;
+                            if (!isSpecifiedNation && !isSpecifiedWorld) {
+                              return false;
+                            }
                           }
                         }
-                      }
 
-                      const buildingsArr =
-                        factionData?.Maps?.[zoomedWorld.name]?.Buildings;
-                      // Only include if there is at least one building with nonzero amount
-                      return (
-                        Array.isArray(buildingsArr) &&
-                        buildingsArr.some(
-                          (levels) =>
-                            levels &&
-                            Object.entries(levels).some(
-                              ([key, amount]) => amount > 0
-                            )
-                        )
-                      );
-                    });
-
-                    if (factionsWithBuildings.length === 0) {
-                      return (
-                        <div style={{ color: "#888", fontStyle: "italic" }}>
-                          No building information available for this world.
-                          <br />
-                          <small>
-                            Debug: Looking for buildings in {zoomedWorld.name}
-                          </small>
-                        </div>
-                      );
-                    }
-
-                    return factionsWithBuildings.map(
-                      ([factionName, factionData]) => {
-                        const planetBuildings =
-                          factionData.Maps[zoomedWorld.name].Buildings;
-                        const buildingDefs = Array.isArray(
-                          factionData.Buildings
-                        )
-                          ? factionData.Buildings
-                          : [];
-                        // Only show if there is at least one building with nonzero amount
-                        const hasBuildings =
-                          Array.isArray(planetBuildings) &&
-                          planetBuildings.some(
+                        const buildingsArr =
+                          factionData?.Maps?.[zoomedWorld.name]?.Buildings;
+                        // Only include if there is at least one building with nonzero amount
+                        return (
+                          Array.isArray(buildingsArr) &&
+                          buildingsArr.some(
                             (levels) =>
                               levels &&
                               Object.entries(levels).some(
                                 ([key, amount]) => amount > 0
                               )
-                          );
-                        if (!hasBuildings) return null;
-                        const displayName = factionData.name || factionName;
+                          )
+                        );
+                      });
+
+                      if (factionsWithBuildings.length === 0) {
                         return (
-                          <details
-                            key={factionName}
-                            style={{ marginBottom: "12px" }}
-                            open={false}
-                          >
-                            <summary
-                              style={{
-                                color: getFactionColor(factionName),
-                                fontWeight: "bold",
-                                fontSize: "16px",
-                                cursor: "pointer",
-                              }}
+                          <div style={{ color: "#888", fontStyle: "italic" }}>
+                            No building information available for this world.
+                            <br />
+                            <small>
+                              Debug: Looking for buildings in {zoomedWorld.name}
+                            </small>
+                          </div>
+                        );
+                      }
+
+                      return factionsWithBuildings.map(
+                        ([factionName, factionData]) => {
+                          const planetBuildings =
+                            factionData.Maps[zoomedWorld.name].Buildings;
+                          const buildingDefs = Array.isArray(
+                            factionData.Buildings
+                          )
+                            ? factionData.Buildings
+                            : [];
+                          // Only show if there is at least one building with nonzero amount
+                          const hasBuildings =
+                            Array.isArray(planetBuildings) &&
+                            planetBuildings.some(
+                              (levels) =>
+                                levels &&
+                                Object.entries(levels).some(
+                                  ([key, amount]) => amount > 0
+                                )
+                            );
+                          if (!hasBuildings) return null;
+                          const displayName = factionData.name || factionName;
+                          return (
+                            <details
+                              key={factionName}
+                              style={{ marginBottom: "12px" }}
+                              open={false}
                             >
-                              {displayName}
-                            </summary>
-                            <ul
-                              style={{ marginLeft: "16px", marginTop: "8px" }}
-                            >
-                              {planetBuildings.map(
-                                (buildingLevels, buildingId) => {
-                                  if (!buildingLevels) return null;
-                                  const def = buildingDefs[buildingId];
-                                  if (!def) return null;
-                                  const name =
-                                    def.name ||
-                                    def.Name ||
-                                    `Building ${buildingId}`;
-                                  const type = def.type || def.Type || "";
-                                  // buildingLevels: { [level]: amount }, key 0 = level 1, key 9 = level 10
-                                  return Object.entries(buildingLevels)
-                                    .filter(([key, amount]) => {
-                                      // Hide key 0 if amount is 0
-                                      if (key === "0" && amount === 0)
-                                        return false;
-                                      return amount > 0;
-                                    })
-                                    .map(([key, amount]) => {
-                                      let displayLevel = parseInt(key) + 1;
-                                      return (
-                                        <li
-                                          key={name + key}
-                                          style={{ marginBottom: "4px" }}
-                                        >
-                                          <span style={{ fontWeight: "bold" }}>
-                                            {name}
-                                          </span>
-                                          {type && (
+                              <summary
+                                style={{
+                                  color: getFactionColor(factionName),
+                                  fontWeight: "bold",
+                                  fontSize: "16px",
+                                  cursor: "pointer",
+                                }}
+                              >
+                                {displayName}
+                              </summary>
+                              <ul
+                                style={{ marginLeft: "16px", marginTop: "8px" }}
+                              >
+                                {planetBuildings.map(
+                                  (buildingLevels, buildingId) => {
+                                    if (!buildingLevels) return null;
+                                    const def = buildingDefs[buildingId];
+                                    if (!def) return null;
+                                    const name =
+                                      def.name ||
+                                      def.Name ||
+                                      `Building ${buildingId}`;
+                                    const type = def.type || def.Type || "";
+                                    // buildingLevels: { [level]: amount }, key 0 = level 1, key 9 = level 10
+                                    return Object.entries(buildingLevels)
+                                      .filter(([key, amount]) => {
+                                        // Hide key 0 if amount is 0
+                                        if (key === "0" && amount === 0)
+                                          return false;
+                                        return amount > 0;
+                                      })
+                                      .map(([key, amount]) => {
+                                        let displayLevel = parseInt(key) + 1;
+                                        return (
+                                          <li
+                                            key={name + key}
+                                            style={{ marginBottom: "4px" }}
+                                          >
+                                            <span
+                                              style={{ fontWeight: "bold" }}
+                                            >
+                                              {name}
+                                            </span>
+                                            {type && (
+                                              <span
+                                                style={{
+                                                  marginLeft: "8px",
+                                                  color: "#888",
+                                                }}
+                                              >
+                                                ({type})
+                                              </span>
+                                            )}
                                             <span
                                               style={{
                                                 marginLeft: "8px",
-                                                color: "#888",
+                                                color: "#00f5ff",
                                               }}
                                             >
-                                              ({type})
+                                              Lvl {displayLevel}
                                             </span>
-                                          )}
-                                          <span
-                                            style={{
-                                              marginLeft: "8px",
-                                              color: "#00f5ff",
-                                            }}
-                                          >
-                                            Lvl {displayLevel}
-                                          </span>
-                                          <span
-                                            style={{
-                                              marginLeft: "8px",
-                                              color: "#fff",
-                                            }}
-                                          >
-                                            x {amount}
-                                          </span>
-                                        </li>
-                                      );
-                                    });
-                                }
-                              )}
-                            </ul>
-                          </details>
-                        );
-                      }
-                    );
-                  })()}
+                                            <span
+                                              style={{
+                                                marginLeft: "8px",
+                                                color: "#fff",
+                                              }}
+                                            >
+                                              x {amount}
+                                            </span>
+                                          </li>
+                                        );
+                                      });
+                                  }
+                                )}
+                              </ul>
+                            </details>
+                          );
+                        }
+                      );
+                    })()}
+                  </div>
+                </div>
+              </div>
+              {/* Right: Planet image, half hidden */}
+              <div
+                style={{
+                  flex: 1,
+                  position: "relative",
+                  overflow: "hidden",
+                  minHeight: "400px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "flex-start",
+                }}
+              >
+                <div
+                  style={{
+                    width: "900px",
+                    height: "900px",
+                    marginLeft: "30%",
+                    marginTop: "-70px",
+                    overflow: "hidden",
+                  }}
+                >
+                  <img
+                    src={`maps/${zoomedWorld.name}.png`}
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      borderRadius: "5%",
+                      objectPosition: "left",
+                      objectFit: "cover",
+                    }}
+                    onError={(e) => {
+                      e.target.src = "maps/placeholder.png";
+                    }}
+                    alt={zoomedWorld.name}
+                  />
                 </div>
               </div>
             </div>
-            {/* Right: Planet image, half hidden */}
-            <div
-              style={{
-                flex: 1,
-                position: "relative",
-                overflow: "hidden",
-                minHeight: "400px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "flex-start",
-              }}
-            >
-              <div
-                style={{
-                  width: "900px",
-                  height: "900px",
-                  marginLeft: "30%",
-                  marginTop: "-70px",
-                  overflow: "hidden",
-                }}
-              >
-                <img
-                  src={`maps/${zoomedWorld.name}.png`}
-                  style={{
-                    width: "100%",
-                    height: "100%",
-                    borderRadius: "5%",
-                    objectPosition: "left",
-                    objectFit: "cover",
-                  }}
-                  onError={(e) => {
-                    e.target.src = "maps/placeholder.png";
-                  }}
-                  alt={zoomedWorld.name}
-                />
+          ) : !selectedSystem ? (
+            <div className="system-selection">
+              <h3>Select Solar System:</h3>
+              <div className="system-buttons">
+                {Object.keys(solarSystems).map((systemName) => (
+                  <button
+                    key={systemName}
+                    className="system-btn"
+                    onClick={() => selectSystem(systemName)}
+                    disabled={loading}
+                  >
+                    <div className="system-name">{systemName}</div>
+                  </button>
+                ))}
               </div>
             </div>
-          </div>
-        ) : !selectedSystem ? (
-          <div className="system-selection">
-            <h3>Select Solar System:</h3>
-            <div className="system-buttons">
-              {Object.keys(solarSystems).map((systemName) => (
+          ) : (
+            <div className="system-view">
+              <div className="system-header">
                 <button
-                  key={systemName}
-                  className="system-btn"
-                  onClick={() => selectSystem(systemName)}
-                  disabled={loading}
+                  className="back-system-btn"
+                  onClick={() => setSelectedSystem(null)}
                 >
-                  <div className="system-name">{systemName}</div>
+                  ← Back to Systems
                 </button>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <div className="system-view">
-            <div className="system-header">
-              <button
-                className="back-system-btn"
-                onClick={() => setSelectedSystem(null)}
-              >
-                ← Back to Systems
-              </button>
-              <h3>{selectedSystem} System</h3>
-            </div>
+                <h3>{selectedSystem} System</h3>
+                <button
+                  className="view-toggle-btn"
+                  onClick={() => setAnimatedView(!animatedView)}
+                  title={
+                    animatedView
+                      ? "Switch to Grid View"
+                      : "Switch to Animated View"
+                  }
+                >
+                  {animatedView ? "🔳 Grid" : "🌌 Animated"}
+                </button>
+              </div>
 
-            {loading ? (
-              <div className="loading-system">Loading system data...</div>
-            ) : (
-              <div
-                className="worlds-grid"
-                ref={mapScrollRef}
-                style={{ paddingBottom: "48px", overflowY: "auto" }}
-              >
-                {solarSystems[selectedSystem].map((worldName) => {
-                  // ...existing code...
-                  const fleetsAtWorld = Object.entries(systemData).reduce(
-                    (acc, [factionName, fleets]) => {
-                      const worldFleets = fleets.filter(
-                        (fleet) => fleet.State?.Location === worldName
-                      );
-                      if (worldFleets.length > 0) {
-                        acc.push(
-                          ...worldFleets.map((fleet) => ({
-                            ...fleet,
-                            factionName,
-                          }))
+              {loading ? (
+                <div className="loading-system">Loading system data...</div>
+              ) : !animatedView ? (
+                <div
+                  className="worlds-grid"
+                  ref={mapScrollRef}
+                  style={{ paddingBottom: "48px", overflowY: "auto" }}
+                >
+                  {solarSystems[selectedSystem].map((worldName) => {
+                    // ...existing code...
+                    const fleetsAtWorld = Object.entries(systemData).reduce(
+                      (acc, [factionName, fleets]) => {
+                        const worldFleets = fleets.filter(
+                          (fleet) => fleet.State?.Location === worldName
                         );
-                      }
-                      return acc;
-                    },
-                    []
-                  );
-
-                  // Determine if current faction has at least one active unit (Defense, Patrol, Attack)
-                  const currentFactionFleetsWithShips = fleetsAtWorld.filter(
-                    (fleet) =>
-                      fleet.factionName.toLowerCase() ===
-                        currentFaction.toLowerCase() &&
-                      fleet.Vehicles &&
-                      fleet.Vehicles.reduce(
-                        (sum, v) => sum + (v.count || 0),
-                        0
-                      ) > 0
-                  );
-
-                  const currentFactionActiveCombatUnits =
-                    currentFactionFleetsWithShips.filter((fleet) =>
-                      ["Defense", "Patrol", "Battle", "Activating"].includes(
-                        fleet.State?.Action === "Activating"
-                          ? "Idle"
-                          : fleet.State?.Action
-                      )
+                        if (worldFleets.length > 0) {
+                          acc.push(
+                            ...worldFleets.map((fleet) => ({
+                              ...fleet,
+                              factionName,
+                            }))
+                          );
+                        }
+                        return acc;
+                      },
+                      []
                     );
 
-                  // Only show fleet pointers if current faction has fleets with ships > 0
-                  const currentFactionHasValidFleetHere = refereeMode?.isReferee
-                    ? fleetsAtWorld.length > 0 // Referee can see all fleets
-                    : currentFactionFleetsWithShips.length > 0;
-                  const visibleFleets = refereeMode?.isReferee
-                    ? fleetsAtWorld // Referee sees all fleets
-                    : currentFactionHasValidFleetHere
-                    ? fleetsAtWorld
-                    : fleetsAtWorld.filter(
-                        (fleet) =>
-                          fleet.factionName.toLowerCase() ===
-                          currentFaction.toLowerCase()
+                    // Determine if current faction has at least one active unit (Defense, Patrol, Attack)
+                    const currentFactionFleetsWithShips = fleetsAtWorld.filter(
+                      (fleet) =>
+                        fleet.factionName.toLowerCase() ===
+                          currentFaction.toLowerCase() &&
+                        fleet.Vehicles &&
+                        fleet.Vehicles.reduce(
+                          (sum, v) => sum + (v.count || 0),
+                          0
+                        ) > 0
+                    );
+
+                    const currentFactionActiveCombatUnits =
+                      currentFactionFleetsWithShips.filter((fleet) =>
+                        ["Defense", "Patrol", "Battle", "Activating"].includes(
+                          fleet.State?.Action === "Activating"
+                            ? "Idle"
+                            : fleet.State?.Action
+                        )
                       );
 
-                  // Group fleets by faction for collapse feature
-                  const fleetsByFaction = visibleFleets.reduce((acc, fleet) => {
-                    if (!acc[fleet.factionName]) acc[fleet.factionName] = [];
-                    acc[fleet.factionName].push(fleet);
-                    return acc;
-                  }, {});
-
-                  // Create display fleets (collapsed or expanded)
-                  const displayFleets = [];
-                  Object.entries(fleetsByFaction).forEach(
-                    ([factionName, factionFleets]) => {
-                      const collapseKey = `${factionName}-${worldName}`;
-                      if (
-                        collapsedFactions.has(collapseKey) &&
-                        factionFleets.length > 1
-                      ) {
-                        // Show single collapsed fleet
-                        displayFleets.push({
-                          ...factionFleets[0],
-                          isCollapsed: true,
-                          collapsedCount: factionFleets.length,
-                          factionName,
-                        });
-                      } else {
-                        // Show all fleets normally
-                        factionFleets.forEach((fleet) =>
-                          displayFleets.push(fleet)
+                    // Only show fleet pointers if current faction has fleets with ships > 0
+                    const currentFactionHasValidFleetHere =
+                      refereeMode?.isReferee
+                        ? fleetsAtWorld.length > 0 // Referee can see all fleets
+                        : currentFactionFleetsWithShips.length > 0;
+                    const visibleFleets = refereeMode?.isReferee
+                      ? fleetsAtWorld // Referee sees all fleets
+                      : currentFactionHasValidFleetHere
+                      ? fleetsAtWorld
+                      : fleetsAtWorld.filter(
+                          (fleet) =>
+                            fleet.factionName.toLowerCase() ===
+                            currentFaction.toLowerCase()
                         );
+
+                    // Group fleets by faction for collapse feature
+                    const fleetsByFaction = visibleFleets.reduce(
+                      (acc, fleet) => {
+                        if (!acc[fleet.factionName])
+                          acc[fleet.factionName] = [];
+                        acc[fleet.factionName].push(fleet);
+                        return acc;
+                      },
+                      {}
+                    );
+
+                    // Create display fleets (collapsed or expanded)
+                    const displayFleets = [];
+                    Object.entries(fleetsByFaction).forEach(
+                      ([factionName, factionFleets]) => {
+                        const collapseKey = `${factionName}-${worldName}`;
+                        if (
+                          collapsedFactions.has(collapseKey) &&
+                          factionFleets.length > 1
+                        ) {
+                          // Show single collapsed fleet
+                          displayFleets.push({
+                            ...factionFleets[0],
+                            isCollapsed: true,
+                            collapsedCount: factionFleets.length,
+                            factionName,
+                          });
+                        } else {
+                          // Show all fleets normally
+                          factionFleets.forEach((fleet) =>
+                            displayFleets.push(fleet)
+                          );
+                        }
                       }
-                    }
-                  );
+                    );
 
-                  // Separate ground and space units from display fleets
-                  const groundUnits = displayFleets.filter(
-                    (fleet) =>
-                      fleet.Type !== "Space" ||
-                      (fleet.Vehicles &&
-                        fleet.Vehicles.some((v) => {
-                          const vehicle = allFactions[
-                            fleet.factionName
-                          ]?.Vehicles?.find((veh) => veh.ID === v.ID);
-                          return (
-                            vehicle &&
-                            vehicle.name &&
-                            (vehicle.name.toLowerCase().includes("tank") ||
-                              vehicle.name.toLowerCase().includes("infantry") ||
-                              vehicle.name.toLowerCase().includes("artillery"))
-                          );
-                        }))
-                  );
+                    // Separate ground and space units from display fleets
+                    const groundUnits = displayFleets.filter(
+                      (fleet) =>
+                        fleet.Type !== "Space" ||
+                        (fleet.Vehicles &&
+                          fleet.Vehicles.some((v) => {
+                            const vehicle = allFactions[
+                              fleet.factionName
+                            ]?.Vehicles?.find((veh) => veh.ID === v.ID);
+                            return (
+                              vehicle &&
+                              vehicle.name &&
+                              (vehicle.name.toLowerCase().includes("tank") ||
+                                vehicle.name
+                                  .toLowerCase()
+                                  .includes("infantry") ||
+                                vehicle.name
+                                  .toLowerCase()
+                                  .includes("artillery"))
+                            );
+                          }))
+                    );
 
-                  const spaceUnits = displayFleets.filter(
-                    (fleet) =>
-                      fleet.Type === "Space" &&
-                      (!fleet.Vehicles ||
-                        !fleet.Vehicles.some((v) => {
-                          const vehicle = allFactions[
-                            fleet.factionName
-                          ]?.Vehicles?.find((veh) => veh.ID === v.ID);
-                          return (
-                            vehicle &&
-                            vehicle.name &&
-                            (vehicle.name.toLowerCase().includes("tank") ||
-                              vehicle.name.toLowerCase().includes("infantry") ||
-                              vehicle.name.toLowerCase().includes("artillery"))
-                          );
-                        }))
-                  );
+                    const spaceUnits = displayFleets.filter(
+                      (fleet) =>
+                        fleet.Type === "Space" &&
+                        (!fleet.Vehicles ||
+                          !fleet.Vehicles.some((v) => {
+                            const vehicle = allFactions[
+                              fleet.factionName
+                            ]?.Vehicles?.find((veh) => veh.ID === v.ID);
+                            return (
+                              vehicle &&
+                              vehicle.name &&
+                              (vehicle.name.toLowerCase().includes("tank") ||
+                                vehicle.name
+                                  .toLowerCase()
+                                  .includes("infantry") ||
+                                vehicle.name
+                                  .toLowerCase()
+                                  .includes("artillery"))
+                            );
+                          }))
+                    );
 
-                  // --- PATCH: Make planet image clickable if current faction has active combat units OR referee mode ---
-                  const canZoomIn =
-                    refereeMode?.isReferee ||
-                    currentFactionActiveCombatUnits.length > 0;
+                    // --- PATCH: Make planet image clickable if current faction has active combat units OR referee mode ---
+                    const canZoomIn =
+                      refereeMode?.isReferee ||
+                      currentFactionActiveCombatUnits.length > 0;
 
-                  return (
-                    <div key={worldName} className="world-container">
-                      <div className="world-circle">
-                        <div className="world-name">{worldName}</div>
-                        <div className="world-center">
-                          {/* Greyscale if current faction has no units here (fog of war) */}
-                          <div
-                            style={{
-                              cursor: canZoomIn ? "pointer" : "default",
-                            }}
-                            onClick={() => {
-                              if (canZoomIn) handleZoomIn(worldName);
-                            }}
-                          >
-                            <PlanetImageOrEmoji
-                              planetName={worldName}
-                              grayscale={
-                                currentFactionActiveCombatUnits.length === 0
+                    return (
+                      <div key={worldName} className="world-container">
+                        <div className="world-circle">
+                          <div className="world-name">{worldName}</div>
+                          <div className="world-center">
+                            {/* Greyscale if current faction has no units here (fog of war) */}
+                            <div
+                              style={{
+                                cursor: canZoomIn ? "pointer" : "default",
+                              }}
+                              onClick={() => {
+                                if (canZoomIn) handleZoomIn(worldName);
+                              }}
+                            >
+                              <PlanetImageOrEmoji
+                                planetName={worldName}
+                                grayscale={
+                                  currentFactionActiveCombatUnits.length === 0
+                                }
+                              />
+                            </div>
+                          </div>
+
+                          {/* Ground units inner ring */}
+                          <div className="fleet-markers ground-ring">
+                            {groundUnits.map((fleet, index) => {
+                              const angle = (360 / groundUnits.length) * index;
+                              const radius = 65; // inner ring
+                              const x =
+                                Math.cos((angle * Math.PI) / 180) * radius;
+                              const y =
+                                Math.sin((angle * Math.PI) / 180) * radius;
+                              // If collapsed, show number of fleets and arrow, and clicking uncollapses
+                              if (fleet.isCollapsed) {
+                                return (
+                                  <div
+                                    key={`ground-${fleet.factionName}-collapsed`}
+                                    className="fleet-marker"
+                                    style={{
+                                      transform: `translate(${x}px, ${y}px)`,
+                                      color: getFactionColor(fleet.factionName),
+                                      cursor: "pointer",
+                                      fontWeight: "bold",
+                                      fontSize: "18px",
+                                      background: "#222b",
+                                      borderRadius: "50%",
+                                      padding: "2px 8px",
+                                      border: "1px solid #444",
+                                    }}
+                                    onClick={() =>
+                                      toggleFactionCollapse(
+                                        fleet.factionName,
+                                        worldName
+                                      )
+                                    }
+                                    title={`${fleet.collapsedCount} ${
+                                      allFactions[fleet.factionName]?.name ||
+                                      fleet.factionName
+                                    } fleets (click to expand)`}
+                                  >
+                                    {fleet.collapsedCount}↑
+                                  </div>
+                                );
                               }
-                            />
+                              // Normal fleet marker
+                              return (
+                                <div
+                                  key={`ground-${fleet.factionName}-${fleet.ID}-${index}`}
+                                  className="fleet-marker"
+                                  style={{
+                                    transform: `translate(${x}px, ${y}px)`,
+                                    color: getFactionColor(fleet.factionName),
+                                    cursor: "pointer",
+                                  }}
+                                  onClick={() =>
+                                    openFleetModal(fleet, fleet.factionName)
+                                  }
+                                  title={`${
+                                    allFactions[fleet.factionName]?.name ||
+                                    fleet.factionName
+                                  } - ${fleet.Name || `Fleet ${fleet.ID}`}`}
+                                >
+                                  {getFleetIcon(fleet)}
+                                </div>
+                              );
+                            })}
+                          </div>
+                          {/* Space units outer ring */}
+                          <div className="fleet-markers space-ring">
+                            {spaceUnits.map((fleet, index) => {
+                              const angle = (360 / spaceUnits.length) * index;
+                              const radius = 90; // outer ring
+                              const x =
+                                Math.cos((angle * Math.PI) / 180) * radius;
+                              const y =
+                                Math.sin((angle * Math.PI) / 180) * radius;
+                              if (fleet.isCollapsed) {
+                                return (
+                                  <div
+                                    key={`space-${fleet.factionName}-collapsed`}
+                                    className="fleet-marker"
+                                    style={{
+                                      transform: `translate(${x}px, ${y}px)`,
+                                      color: getFactionColor(fleet.factionName),
+                                      cursor: "pointer",
+                                      fontWeight: "bold",
+                                      fontSize: "18px",
+                                      background: "#222b",
+                                      borderRadius: "50%",
+                                      padding: "2px 8px",
+                                      border: "1px solid #444",
+                                    }}
+                                    onClick={() =>
+                                      toggleFactionCollapse(
+                                        fleet.factionName,
+                                        worldName
+                                      )
+                                    }
+                                    title={`${fleet.collapsedCount} ${
+                                      allFactions[fleet.factionName]?.name ||
+                                      fleet.factionName
+                                    } fleets (click to expand)`}
+                                  >
+                                    {fleet.collapsedCount}↑
+                                  </div>
+                                );
+                              }
+                              return (
+                                <div
+                                  key={`space-${fleet.factionName}-${fleet.ID}-${index}`}
+                                  className="fleet-marker"
+                                  style={{
+                                    transform: `translate(${x}px, ${y}px)`,
+                                    color: getFactionColor(fleet.factionName),
+                                    cursor: "pointer",
+                                  }}
+                                  onClick={() =>
+                                    openFleetModal(fleet, fleet.factionName)
+                                  }
+                                  title={`${
+                                    allFactions[fleet.factionName]?.name ||
+                                    fleet.factionName
+                                  } - ${fleet.Name || `Fleet ${fleet.ID}`}`}
+                                >
+                                  {getFleetIcon(fleet)}
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
 
-                        {/* Ground units inner ring */}
-                        <div className="fleet-markers ground-ring">
-                          {groundUnits.map((fleet, index) => {
-                            const angle = (360 / groundUnits.length) * index;
-                            const radius = 65; // inner ring
-                            const x =
-                              Math.cos((angle * Math.PI) / 180) * radius;
-                            const y =
-                              Math.sin((angle * Math.PI) / 180) * radius;
-                            // If collapsed, show number of fleets and arrow, and clicking uncollapses
-                            if (fleet.isCollapsed) {
-                              return (
-                                <div
-                                  key={`ground-${fleet.factionName}-collapsed`}
-                                  className="fleet-marker"
-                                  style={{
-                                    transform: `translate(${x}px, ${y}px)`,
-                                    color: getFactionColor(fleet.factionName),
-                                    cursor: "pointer",
-                                    fontWeight: "bold",
-                                    fontSize: "18px",
-                                    background: "#222b",
-                                    borderRadius: "50%",
-                                    padding: "2px 8px",
-                                    border: "1px solid #444",
-                                  }}
-                                  onClick={() =>
-                                    toggleFactionCollapse(
-                                      fleet.factionName,
-                                      worldName
+                        <div className="world-info">
+                          <div className="world-fleets-count">
+                            {currentFactionHasValidFleetHere
+                              ? `${
+                                  groundUnits.filter((f) => !f.isCollapsed)
+                                    .length +
+                                  groundUnits
+                                    .filter((f) => f.isCollapsed)
+                                    .reduce(
+                                      (sum, f) => sum + f.collapsedCount,
+                                      0
                                     )
-                                  }
-                                  title={`${fleet.collapsedCount} ${
-                                    allFactions[fleet.factionName]?.name ||
-                                    fleet.factionName
-                                  } fleets (click to expand)`}
-                                >
-                                  {fleet.collapsedCount}↑
-                                </div>
-                              );
-                            }
-                            // Normal fleet marker
-                            return (
-                              <div
-                                key={`ground-${fleet.factionName}-${fleet.ID}-normal`}
-                                className="fleet-marker"
-                                style={{
-                                  transform: `translate(${x}px, ${y}px)`,
-                                  color: getFactionColor(fleet.factionName),
-                                  cursor: "pointer",
-                                }}
-                                onClick={() =>
-                                  openFleetModal(fleet, fleet.factionName)
-                                }
-                                title={`${
-                                  allFactions[fleet.factionName]?.name ||
-                                  fleet.factionName
-                                } - ${fleet.Name || `Fleet ${fleet.ID}`}`}
-                              >
-                                {getFleetIcon(fleet)}
-                              </div>
-                            );
-                          })}
-                        </div>
-                        {/* Space units outer ring */}
-                        <div className="fleet-markers space-ring">
-                          {spaceUnits.map((fleet, index) => {
-                            const angle = (360 / spaceUnits.length) * index;
-                            const radius = 90; // outer ring
-                            const x =
-                              Math.cos((angle * Math.PI) / 180) * radius;
-                            const y =
-                              Math.sin((angle * Math.PI) / 180) * radius;
-                            if (fleet.isCollapsed) {
-                              return (
-                                <div
-                                  key={`space-${fleet.factionName}-collapsed`}
-                                  className="fleet-marker"
-                                  style={{
-                                    transform: `translate(${x}px, ${y}px)`,
-                                    color: getFactionColor(fleet.factionName),
-                                    cursor: "pointer",
-                                    fontWeight: "bold",
-                                    fontSize: "18px",
-                                    background: "#222b",
-                                    borderRadius: "50%",
-                                    padding: "2px 8px",
-                                    border: "1px solid #444",
-                                  }}
-                                  onClick={() =>
-                                    toggleFactionCollapse(
-                                      fleet.factionName,
-                                      worldName
+                                } ground unit${
+                                  groundUnits.length !== 1 ? "s" : ""
+                                }, ${
+                                  spaceUnits.filter((f) => !f.isCollapsed)
+                                    .length +
+                                  spaceUnits
+                                    .filter((f) => f.isCollapsed)
+                                    .reduce(
+                                      (sum, f) => sum + f.collapsedCount,
+                                      0
                                     )
-                                  }
-                                  title={`${fleet.collapsedCount} ${
-                                    allFactions[fleet.factionName]?.name ||
-                                    fleet.factionName
-                                  } fleets (click to expand)`}
-                                >
-                                  {fleet.collapsedCount}↑
-                                </div>
-                              );
-                            }
-                            return (
-                              <div
-                                key={`space-${fleet.factionName}-${fleet.ID}-normal`}
-                                className="fleet-marker"
-                                style={{
-                                  transform: `translate(${x}px, ${y}px)`,
-                                  color: getFactionColor(fleet.factionName),
-                                  cursor: "pointer",
-                                }}
-                                onClick={() =>
-                                  openFleetModal(fleet, fleet.factionName)
-                                }
-                                title={`${
-                                  allFactions[fleet.factionName]?.name ||
-                                  fleet.factionName
-                                } - ${fleet.Name || `Fleet ${fleet.ID}`}`}
-                              >
-                                {getFleetIcon(fleet)}
-                              </div>
-                            );
-                          })}
+                                } space unit${
+                                  spaceUnits.length !== 1 ? "s" : ""
+                                }`
+                              : "? units"}
+                          </div>
                         </div>
                       </div>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
+          )}
 
-                      <div className="world-info">
-                        <div className="world-fleets-count">
-                          {currentFactionHasValidFleetHere
-                            ? `${
-                                groundUnits.filter((f) => !f.isCollapsed)
-                                  .length +
-                                groundUnits
-                                  .filter((f) => f.isCollapsed)
-                                  .reduce((sum, f) => sum + f.collapsedCount, 0)
-                              } ground unit${
-                                groundUnits.length !== 1 ? "s" : ""
-                              }, ${
-                                spaceUnits.filter((f) => !f.isCollapsed)
-                                  .length +
-                                spaceUnits
-                                  .filter((f) => f.isCollapsed)
-                                  .reduce((sum, f) => sum + f.collapsedCount, 0)
-                              } space unit${spaceUnits.length !== 1 ? "s" : ""}`
-                            : "? units"}
-                        </div>
-                      </div>
+          {/* Fleet Detail Modal */}
+          {showFleetModal && selectedFleet && (
+            <div className="fleet-modal-overlay" onClick={closeFleetModal}>
+              <div className="fleet-modal" onClick={(e) => e.stopPropagation()}>
+                <div className="fleet-modal-header">
+                  <h3
+                    style={{
+                      color: getFactionColor(selectedFleet.factionName),
+                    }}
+                  >
+                    {allFactions[selectedFleet.factionName]?.name ||
+                      selectedFleet.factionName}{" "}
+                    - {selectedFleet.Name || `Fleet ${selectedFleet.ID}`}
+                  </h3>
+                  <button className="close-btn" onClick={closeFleetModal}>
+                    ✕
+                  </button>
+                </div>
+                <div className="fleet-modal-content">
+                  <div className="fleet-details">
+                    <div className="fleet-basic-info">
+                      <p>
+                        <strong>Location:</strong>{" "}
+                        {selectedFleet.State?.Location || "Unknown"}
+                      </p>
+                      <p>
+                        <strong>Status:</strong>{" "}
+                        {selectedFleet.State?.Action === "Activating"
+                          ? "Activating"
+                          : selectedFleet.State?.Action || "Unknown"}
+                      </p>
+                      <p>
+                        <strong>Type:</strong> {selectedFleet.Type || "Unknown"}
+                      </p>
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Fleet Detail Modal */}
-        {showFleetModal && selectedFleet && (
-          <div className="fleet-modal-overlay" onClick={closeFleetModal}>
-            <div className="fleet-modal" onClick={(e) => e.stopPropagation()}>
-              <div className="fleet-modal-header">
-                <h3
-                  style={{ color: getFactionColor(selectedFleet.factionName) }}
-                >
-                  {allFactions[selectedFleet.factionName]?.name ||
-                    selectedFleet.factionName}{" "}
-                  - {selectedFleet.Name || `Fleet ${selectedFleet.ID}`}
-                </h3>
-                <button className="close-btn" onClick={closeFleetModal}>
-                  ✕
-                </button>
-              </div>
-              <div className="fleet-modal-content">
-                <div className="fleet-details">
-                  <div className="fleet-basic-info">
-                    <p>
-                      <strong>Location:</strong>{" "}
-                      {selectedFleet.State?.Location || "Unknown"}
-                    </p>
-                    <p>
-                      <strong>Status:</strong>{" "}
-                      {selectedFleet.State?.Action === "Activating"
-                        ? "Activating"
-                        : selectedFleet.State?.Action || "Unknown"}
-                    </p>
-                    <p>
-                      <strong>Type:</strong> {selectedFleet.Type || "Unknown"}
-                    </p>
-                  </div>
-                  <div className="fleet-vehicles">
-                    <h4>Fleet Composition:</h4>
-                    {Array.isArray(selectedFleet.Vehicles) &&
-                    selectedFleet.Vehicles.length > 0 ? (
-                      (() => {
-                        const isCurrentFaction =
-                          selectedFleet.factionName.toLowerCase() ===
-                          currentFaction.toLowerCase();
-                        const totalShips = selectedFleet.Vehicles.reduce(
-                          (sum, v) => sum + (v.count || 0),
-                          0
-                        );
-                        // Find the fleets at the selected fleet's world
-                        const fleetsAtWorld = Object.entries(systemData).reduce(
-                          (acc, [factionName, fleets]) => {
+                    <div className="fleet-vehicles">
+                      <h4>Fleet Composition:</h4>
+                      {Array.isArray(selectedFleet.Vehicles) &&
+                      selectedFleet.Vehicles.length > 0 ? (
+                        (() => {
+                          const isCurrentFaction =
+                            selectedFleet.factionName.toLowerCase() ===
+                            currentFaction.toLowerCase();
+                          const totalShips = selectedFleet.Vehicles.reduce(
+                            (sum, v) => sum + (v.count || 0),
+                            0
+                          );
+                          // Find the fleets at the selected fleet's world
+                          const fleetsAtWorld = Object.entries(
+                            systemData
+                          ).reduce((acc, [factionName, fleets]) => {
                             const worldFleets = fleets.filter(
                               (fleet) =>
                                 fleet.State?.Location ===
@@ -1334,319 +1425,329 @@ const TacticalMap = ({ onClose, currentFaction, dbLoaded, refereeMode }) => {
                               );
                             }
                             return acc;
-                          },
-                          []
-                        );
-                        // Determine if current faction has at least one active unit (Defense, Patrol, Attack) at this world
-                        const currentFactionActiveCombatUnits =
-                          fleetsAtWorld.filter(
-                            (fleet) =>
-                              fleet.factionName.toLowerCase() ===
-                                currentFaction.toLowerCase() &&
-                              [
-                                "Defense",
-                                "Patrol",
-                                "Battle",
-                                "Activating",
-                              ].includes(
-                                fleet.State?.Action === "Activating"
-                                  ? "Idle"
-                                  : fleet.State?.Action
-                              )
-                          );
-                        const hasActiveUnit =
-                          currentFactionActiveCombatUnits.length > 0;
-                        if (
-                          isCurrentFaction ||
-                          hasActiveUnit ||
-                          refereeMode?.isReferee
-                        ) {
-                          // For referee mode, show all vehicles without stealth filtering
-                          const visibleVehicles = refereeMode?.isReferee
-                            ? selectedFleet.Vehicles // Referee sees everything
-                            : selectedFleet.Vehicles.filter((vehicle) => {
-                                if (isCurrentFaction) return true;
-                                const factionVehicles =
-                                  allFactions[selectedFleet.factionName]
-                                    ?.Vehicles || [];
-                                const vehicleRecord = factionVehicles.find(
-                                  (v) => v.ID === vehicle.ID
-                                );
-                                const isStealth =
-                                  vehicleRecord?.stealth === true ||
-                                  vehicleRecord?.data?.stealth === true;
-                                if (
-                                  isStealth &&
-                                  selectedFleet.State?.Action !== "Battle"
-                                ) {
-                                  return false;
-                                }
-                                return true;
-                              });
+                          }, []);
+                          // Determine if current faction has at least one active unit (Defense, Patrol, Attack) at this world
+                          const currentFactionActiveCombatUnits =
+                            fleetsAtWorld.filter(
+                              (fleet) =>
+                                fleet.factionName.toLowerCase() ===
+                                  currentFaction.toLowerCase() &&
+                                [
+                                  "Defense",
+                                  "Patrol",
+                                  "Battle",
+                                  "Activating",
+                                ].includes(
+                                  fleet.State?.Action === "Activating"
+                                    ? "Idle"
+                                    : fleet.State?.Action
+                                )
+                            );
+                          const hasActiveUnit =
+                            currentFactionActiveCombatUnits.length > 0;
+                          if (
+                            isCurrentFaction ||
+                            hasActiveUnit ||
+                            refereeMode?.isReferee
+                          ) {
+                            // For referee mode, show all vehicles without stealth filtering
+                            const visibleVehicles = refereeMode?.isReferee
+                              ? selectedFleet.Vehicles // Referee sees everything
+                              : selectedFleet.Vehicles.filter((vehicle) => {
+                                  if (isCurrentFaction) return true;
+                                  const factionVehicles =
+                                    allFactions[selectedFleet.factionName]
+                                      ?.Vehicles || [];
+                                  const vehicleRecord = factionVehicles.find(
+                                    (v) => v.ID === vehicle.ID
+                                  );
+                                  const isStealth =
+                                    vehicleRecord?.stealth === true ||
+                                    vehicleRecord?.data?.stealth === true;
+                                  if (
+                                    isStealth &&
+                                    selectedFleet.State?.Action !== "Battle"
+                                  ) {
+                                    return false;
+                                  }
+                                  return true;
+                                });
+                            return (
+                              <>
+                                <div
+                                  style={{
+                                    fontWeight: "bold",
+                                    marginBottom: "8px",
+                                  }}
+                                >
+                                  Total Ships: {totalShips}
+                                </div>
+                                {visibleVehicles.length > 0 ? (
+                                  <div className="vehicles-list">
+                                    {visibleVehicles.map((vehicle, index) => {
+                                      const vehicleData = allFactions[
+                                        selectedFleet.factionName
+                                      ]?.Vehicles?.find(
+                                        (v) => v.ID === vehicle.ID
+                                      );
+                                      return (
+                                        <div
+                                          key={index}
+                                          className="vehicle-item"
+                                        >
+                                          <span className="vehicle-name">
+                                            {vehicleData?.name ||
+                                              `Vehicle ${vehicle.ID}`}
+                                            {(() => {
+                                              const length =
+                                                vehicleData?.data?.length;
+                                              console.log(length);
+                                              return length
+                                                ? ` (${length}m)`
+                                                : " (error)";
+                                            })()}
+                                          </span>
+                                          <span className="">
+                                            {vehicle.count || 0}
+                                          </span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                ) : (
+                                  <p>No visible ships in this fleet</p>
+                                )}
+                              </>
+                            );
+                          }
+                          // Otherwise, show only total and intelligence insufficient
                           return (
-                            <>
+                            <div
+                              style={{
+                                fontWeight: "bold",
+                                marginBottom: "8px",
+                              }}
+                            >
+                              Total Ships: {totalShips}
                               <div
                                 style={{
-                                  fontWeight: "bold",
-                                  marginBottom: "8px",
+                                  fontStyle: "italic",
+                                  marginTop: "4px",
                                 }}
                               >
-                                Total Ships: {totalShips}
+                                Intelligence insufficient.
                               </div>
-                              {visibleVehicles.length > 0 ? (
-                                <div className="vehicles-list">
-                                  {visibleVehicles.map((vehicle, index) => {
-                                    const vehicleData = allFactions[
-                                      selectedFleet.factionName
-                                    ]?.Vehicles?.find(
-                                      (v) => v.ID === vehicle.ID
-                                    );
-                                    return (
-                                      <div key={index} className="vehicle-item">
-                                        <span className="vehicle-name">
-                                          {vehicleData?.name ||
-                                            `Vehicle ${vehicle.ID}`}
-                                          {(() => {
-                                            const length =
-                                              vehicleData?.data?.length;
-                                            console.log(length);
-                                            return length
-                                              ? ` (${length}m)`
-                                              : " (error)";
-                                          })()}
-                                        </span>
-                                        <span className="">
-                                          {vehicle.count || 0}
-                                        </span>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              ) : (
-                                <p>No visible ships in this fleet</p>
-                              )}
-                            </>
-                          );
-                        }
-                        // Otherwise, show only total and intelligence insufficient
-                        return (
-                          <div
-                            style={{ fontWeight: "bold", marginBottom: "8px" }}
-                          >
-                            Total Ships: {totalShips}
-                            <div
-                              style={{ fontStyle: "italic", marginTop: "4px" }}
-                            >
-                              Intelligence insufficient.
                             </div>
+                          );
+                        })()
+                      ) : (
+                        <p>No vehicles in this fleet</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Add the Collapse Nation button for enemy fleets */}
+                  {selectedFleet.factionName.toLowerCase() !==
+                    currentFaction.toLowerCase() && (
+                    <div style={{ marginTop: "16px", textAlign: "center" }}>
+                      <button
+                        onClick={() => {
+                          toggleFactionCollapse(
+                            selectedFleet.factionName,
+                            selectedFleet.State?.Location
+                          );
+                          closeFleetModal();
+                        }}
+                        style={{
+                          padding: "8px 16px",
+                          backgroundColor: "#444",
+                          color: "white",
+                          border: "1px solid #666",
+                          borderRadius: "4px",
+                          cursor: "pointer",
+                          fontSize: "14px",
+                        }}
+                      >
+                        Collapse Nation
+                      </button>
+                    </div>
+                  )}
+
+                  {selectedFleet.factionName === "pirates" &&
+                    (() => {
+                      // Find all player fleets at this location
+                      const playerFleets =
+                        Array.isArray(
+                          systemData[currentFaction.toLowerCase()]
+                        ) && selectedFleet?.State?.Location
+                          ? systemData[currentFaction.toLowerCase()].filter(
+                              (fleet) =>
+                                fleet.State?.Location ===
+                                  selectedFleet.State.Location &&
+                                fleet.Vehicles &&
+                                fleet.Vehicles.reduce(
+                                  (sum, v) => sum + (v.count || 0),
+                                  0
+                                ) > 0
+                            )
+                          : [];
+                      // --- PATCH: If only one fleet and not set, set selectedPlayerFleetId ---
+
+                      if (playerFleets.length === 0) return null;
+                      return (
+                        <div style={{ marginTop: "16px", textAlign: "center" }}>
+                          <div style={{ marginBottom: "8px" }}>
+                            <label>
+                              <strong>Select your fleet to engage:</strong>
+                              <select
+                                style={{ marginLeft: "8px", padding: "4px" }}
+                                value={
+                                  selectedPlayerFleetId ||
+                                  (playerFleets.length === 1
+                                    ? playerFleets[0].ID
+                                    : "")
+                                }
+                                onChange={(e) =>
+                                  setSelectedPlayerFleetId(e.target.value)
+                                }
+                              >
+                                {playerFleets.map((fleet) => (
+                                  <option key={fleet.ID} value={fleet.ID}>
+                                    {fleet.Name || `Fleet ${fleet.ID}`} (
+                                    {fleet.Vehicles.reduce(
+                                      (sum, v) => sum + (v.count || 0),
+                                      0
+                                    )}{" "}
+                                    ships)
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
                           </div>
-                        );
-                      })()
-                    ) : (
-                      <p>No vehicles in this fleet</p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Add the Collapse Nation button for enemy fleets */}
-                {selectedFleet.factionName.toLowerCase() !==
-                  currentFaction.toLowerCase() && (
-                  <div style={{ marginTop: "16px", textAlign: "center" }}>
-                    <button
-                      onClick={() => {
-                        toggleFactionCollapse(
-                          selectedFleet.factionName,
-                          selectedFleet.State?.Location
-                        );
-                        closeFleetModal();
-                      }}
-                      style={{
-                        padding: "8px 16px",
-                        backgroundColor: "#444",
-                        color: "white",
-                        border: "1px solid #666",
-                        borderRadius: "4px",
-                        cursor: "pointer",
-                        fontSize: "14px",
-                      }}
-                    >
-                      Collapse Nation
-                    </button>
-                  </div>
-                )}
-
-                {selectedFleet.factionName === "pirates" &&
-                  (() => {
-                    // Find all player fleets at this location
-                    const playerFleets =
-                      Array.isArray(systemData[currentFaction.toLowerCase()]) &&
-                      selectedFleet?.State?.Location
-                        ? systemData[currentFaction.toLowerCase()].filter(
-                            (fleet) =>
-                              fleet.State?.Location ===
-                                selectedFleet.State.Location &&
-                              fleet.Vehicles &&
-                              fleet.Vehicles.reduce(
-                                (sum, v) => sum + (v.count || 0),
-                                0
-                              ) > 0
-                          )
-                        : [];
-                    // --- PATCH: If only one fleet and not set, set selectedPlayerFleetId ---
-
-                    if (playerFleets.length === 0) return null;
-                    return (
-                      <div style={{ marginTop: "16px", textAlign: "center" }}>
-                        <div style={{ marginBottom: "8px" }}>
-                          <label>
-                            <strong>Select your fleet to engage:</strong>
-                            <select
-                              style={{ marginLeft: "8px", padding: "4px" }}
-                              value={
+                          <button
+                            onClick={async () => {
+                              const fleetId =
                                 selectedPlayerFleetId ||
                                 (playerFleets.length === 1
                                   ? playerFleets[0].ID
-                                  : "")
-                              }
-                              onChange={(e) =>
-                                setSelectedPlayerFleetId(e.target.value)
-                              }
-                            >
-                              {playerFleets.map((fleet) => (
-                                <option key={fleet.ID} value={fleet.ID}>
-                                  {fleet.Name || `Fleet ${fleet.ID}`} (
-                                  {fleet.Vehicles.reduce(
-                                    (sum, v) => sum + (v.count || 0),
-                                    0
-                                  )}{" "}
-                                  ships)
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                        </div>
-                        <button
-                          onClick={async () => {
-                            const fleetId =
-                              selectedPlayerFleetId ||
-                              (playerFleets.length === 1
-                                ? playerFleets[0].ID
-                                : null);
-                            const playerFleet = playerFleets.find(
-                              (f) => f.ID === fleetId
-                            );
-                            if (playerFleet) {
-                              console.log(
-                                "Engaging pirates with fleet:",
-                                playerFleet
+                                  : null);
+                              const playerFleet = playerFleets.find(
+                                (f) => f.ID === fleetId
                               );
-                              console.log("Selected fleet:", selectedFleet);
-                              await handleEngagePirates(
-                                playerFleet,
-                                selectedFleet
-                              );
+                              if (playerFleet) {
+                                console.log(
+                                  "Engaging pirates with fleet:",
+                                  playerFleet
+                                );
+                                console.log("Selected fleet:", selectedFleet);
+                                await handleEngagePirates(
+                                  playerFleet,
+                                  selectedFleet
+                                );
+                              }
+                            }}
+                            style={{
+                              padding: "8px 16px",
+                              backgroundColor: "#b00",
+                              color: "white",
+                              border: "1px solid #800",
+                              borderRadius: "4px",
+                              cursor:
+                                selectedPlayerFleetId ||
+                                (playerFleets.length === 1
+                                  ? "pointer"
+                                  : "not-allowed"),
+                              fontSize: "14px",
+                              opacity:
+                                selectedPlayerFleetId ||
+                                playerFleets.length === 1
+                                  ? 1
+                                  : 0.6,
+                            }}
+                            disabled={
+                              //!selectedPlayerFleetId && playerFleets.length !== 1
+                              true
                             }
-                          }}
-                          style={{
-                            padding: "8px 16px",
-                            backgroundColor: "#b00",
-                            color: "white",
-                            border: "1px solid #800",
-                            borderRadius: "4px",
-                            cursor:
-                              selectedPlayerFleetId ||
-                              (playerFleets.length === 1
-                                ? "pointer"
-                                : "not-allowed"),
-                            fontSize: "14px",
-                            opacity:
-                              selectedPlayerFleetId || playerFleets.length === 1
-                                ? 1
-                                : 0.6,
-                          }}
-                          disabled={
-                            //!selectedPlayerFleetId && playerFleets.length !== 1
-                            true
-                          }
-                        >
-                          Engage Pirates DON'T USE
-                        </button>
-                        <br />
-                        you'll lose ships without any gain
-                      </div>
-                    );
-                  })()}
+                          >
+                            Engage Pirates DON'T USE
+                          </button>
+                          <br />
+                          you'll lose ships without any gain
+                        </div>
+                      );
+                    })()}
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Battle Result Modal */}
-        {battleResult && (
-          <div
-            className="fleet-modal-overlay"
-            onClick={() => setBattleResult(null)}
-          >
-            <div className="fleet-modal" onClick={(e) => e.stopPropagation()}>
-              <div className="fleet-modal-header">
-                <h3>{battleResult.win ? "Victory!" : "Defeat!"}</h3>
-                <button
-                  className="close-btn"
-                  onClick={() => setBattleResult(null)}
-                >
-                  ✕
-                </button>
-              </div>
-              <div className="fleet-modal-content">
-                <h4>Your Losses:</h4>
-                <ul>
-                  {battleResult.playerLosses.map((loss) => {
-                    const vDef = allFactions[currentFaction]?.Vehicles?.find(
-                      (v) => v.ID === loss.ID
-                    );
-                    if (!loss.lost) return null;
-                    return (
-                      <li key={loss.ID}>
-                        {vDef?.name || `Ship ${loss.ID}`}: -{loss.lost}
-                      </li>
-                    );
-                  })}
-                </ul>
-                <h4>Pirate Losses:</h4>
-                <ul>
-                  {battleResult.pirateLosses.map((loss) => {
-                    const vDef = allFactions["pirates"]?.Vehicles?.find(
-                      (v) => v.ID === loss.ID
-                    );
-                    if (!loss.lost) return null;
-                    return (
-                      <li key={loss.ID}>
-                        {vDef?.name || `Ship ${loss.ID}`}: -{loss.lost}
-                      </li>
-                    );
-                  })}
-                </ul>
-                {battleResult.win && (
-                  <>
-                    <h4>Resource Reward:</h4>
-                    <ul>
-                      {Object.entries(battleResult.resourceReward).map(
-                        ([k, v]) =>
-                          v > 0 ? (
-                            <li key={k}>
-                              {k}: +{v}
-                            </li>
-                          ) : null
-                      )}
-                    </ul>
-                  </>
-                )}
+          {/* Battle Result Modal */}
+          {battleResult && (
+            <div
+              className="fleet-modal-overlay"
+              onClick={() => setBattleResult(null)}
+            >
+              <div className="fleet-modal" onClick={(e) => e.stopPropagation()}>
+                <div className="fleet-modal-header">
+                  <h3>{battleResult.win ? "Victory!" : "Defeat!"}</h3>
+                  <button
+                    className="close-btn"
+                    onClick={() => setBattleResult(null)}
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="fleet-modal-content">
+                  <h4>Your Losses:</h4>
+                  <ul>
+                    {battleResult.playerLosses.map((loss) => {
+                      const vDef = allFactions[currentFaction]?.Vehicles?.find(
+                        (v) => v.ID === loss.ID
+                      );
+                      if (!loss.lost) return null;
+                      return (
+                        <li key={loss.ID}>
+                          {vDef?.name || `Ship ${loss.ID}`}: -{loss.lost}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  <h4>Pirate Losses:</h4>
+                  <ul>
+                    {battleResult.pirateLosses.map((loss) => {
+                      const vDef = allFactions["pirates"]?.Vehicles?.find(
+                        (v) => v.ID === loss.ID
+                      );
+                      if (!loss.lost) return null;
+                      return (
+                        <li key={loss.ID}>
+                          {vDef?.name || `Ship ${loss.ID}`}: -{loss.lost}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  {battleResult.win && (
+                    <>
+                      <h4>Resource Reward:</h4>
+                      <ul>
+                        {Object.entries(battleResult.resourceReward).map(
+                          ([k, v]) =>
+                            v > 0 ? (
+                              <li key={k}>
+                                {k}: +{v}
+                              </li>
+                            ) : null
+                        )}
+                      </ul>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
-    </div>
+    </>
   );
 };
 

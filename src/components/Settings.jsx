@@ -162,10 +162,7 @@ const Settings = ({ onBack, userSettings = {}, onSettingsChange }) => {
               <label>Inspired by Proxy's SW Rater website</label>
             </div>
             <div className="setting-option">
-              <label>Art by obscurecharcoal, nationalhazard, omegafleet</label>
-            </div>
-            <div className="setting-option">
-              <label>v0.5w</label>
+              <label>v0.6w</label>
             </div>
           </div>
         </div>
@@ -181,4 +178,3 @@ const Settings = ({ onBack, userSettings = {}, onSettingsChange }) => {
 };
 
 export default Settings;
-

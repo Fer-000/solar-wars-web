@@ -344,6 +344,39 @@
   font-family: 'Courier New', monospace;
 }
 
+/* Animated Solar System View */
+.animated-solar-view {
+  position: relative;
+  background: #050505;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.view-toggle-btn {
+  background: rgba(0, 245, 255, 0.1);
+  border: 1px solid rgba(0, 245, 255, 0.3);
+  color: #00f5ff;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 14px;
+  margin-left: auto;
+}
+
+.view-toggle-btn:hover {
+  background: rgba(0, 245, 255, 0.2);
+  border-color: rgba(0, 245, 255, 0.6);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 245, 255, 0.3);
+}
+
+.system-header {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
   .tactical-map-container {
