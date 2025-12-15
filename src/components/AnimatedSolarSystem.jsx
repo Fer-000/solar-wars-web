@@ -1929,33 +1929,27 @@ const AnimatedSolarSystem = ({
 
   // Mobile Handlers
   const handleZoomIn = () => {
-    if (focusedBody) return;
     targetCameraRef.current = {
       ...targetCameraRef.current,
       zoom: Math.min(10, targetCameraRef.current.zoom * 1.12),
     };
   };
   const handleZoomOut = () => {
-    if (focusedBody) return;
     targetCameraRef.current = {
       ...targetCameraRef.current,
       zoom: Math.max(0.3, targetCameraRef.current.zoom * 0.92),
     };
   };
   const handlePanUp = () => {
-    if (focusedBody) return;
     targetCameraRef.current.y -= 60 / cameraRef.current.zoom;
   };
   const handlePanDown = () => {
-    if (focusedBody) return;
     targetCameraRef.current.y += 60 / cameraRef.current.zoom;
   };
   const handlePanLeft = () => {
-    if (focusedBody) return;
     targetCameraRef.current.x -= 60 / cameraRef.current.zoom;
   };
   const handlePanRight = () => {
-    if (focusedBody) return;
     targetCameraRef.current.x += 60 / cameraRef.current.zoom;
   };
   const handleBack = () => returnToOverview();
@@ -2007,7 +2001,7 @@ const AnimatedSolarSystem = ({
         toggleFactionCollapse={toggleFactionCollapse}
       />
       <WarningToast message={warningMessage} opacity={warningOpacity} />
-      {isMobile && !focusedBody && (
+      {isMobile && (
         <MobileControls
           onZoomIn={handleZoomIn}
           onZoomOut={handleZoomOut}
