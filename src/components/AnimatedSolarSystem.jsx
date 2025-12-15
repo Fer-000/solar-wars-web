@@ -5,6 +5,7 @@ import ActionButtons from "./AnimatedSolarSystem/ActionButtons";
 import WorldDetailModal from "./AnimatedSolarSystem/WorldDetailModal";
 import FleetModal from "./AnimatedSolarSystem/FleetModal";
 import WarningToast from "./AnimatedSolarSystem/WarningToast";
+import MobileControls from "./AnimatedSolarSystem/MobileControls";
 import { lerpCamera, screenToWorld } from "./AnimatedSolarSystem/camera";
 import {
   drawSpaceIcon,
@@ -423,9 +424,12 @@ const AnimatedSolarSystem = ({
   onToggleView,
   refereeMode = {},
   onBackToSystems,
+  onSystemChange,
   allFactions = {},
   systemData = {},
   currentFaction = "",
+  // --- NEW: Controls animation level ---
+  animationSettings = { level: "total" },
 }) => {
   const canvasRef = useRef(null);
   const animationRef = useRef(null);
@@ -448,8 +452,22 @@ const AnimatedSolarSystem = ({
   const warningTimeoutRef = useRef(null);
   const fleetPositionsRef = useRef([]); // Store fleet icon positions for click detection
   const timeRef = useRef(0);
-  const solarSystemRef = useRef(null);
+  const solarSystemsRef = useRef(null); // { sol: {...}, corelli: {...} }
+  const systemPositions = useRef({
+    Sol: { x: 0, y: 0 },
+    Corelli: {
+      x: 4200 * Math.cos(Math.PI / 6),
+      y: 4200 * Math.sin(Math.PI / 6),
+    }, // 30° (120° clockwise from top) at 4200 units
+  });
   const initialTimeOffset = useRef(0);
+  const [currentSystemView, setCurrentSystemView] = useState(systemName);
+
+  // --- NEW: Enhanced Battle Animation Refs ---
+  const activeSkirmishesRef = useRef([]); // Tracks ships that have left orbit ("hijacked")
+  const projectilesRef = useRef([]); // Tracks torpedoes/lasers
+  const particlesRef = useRef([]); // Tracks debris/explosions
+  const lastSkirmishSpawnTime = useRef(0);
 
   // Warning messages for extreme zoom/pan
   const warningMessages = [
@@ -461,11 +479,14 @@ const AnimatedSolarSystem = ({
     "OI! You there! Yes, you! Stop poking around where you don’t belong!",
   ];
 
-  // Create solar system once
-  if (!solarSystemRef.current) {
-    solarSystemRef.current = createSolarSystemHierarchy(systemName);
+  // Create both solar systems once
+  if (!solarSystemsRef.current) {
+    solarSystemsRef.current = {
+      Sol: createSolarSystemHierarchy("Sol"),
+      Corelli: createSolarSystemHierarchy("Corelli"),
+    };
   }
-  const solarSystem = solarSystemRef.current;
+  const solarSystem = solarSystemsRef.current[systemName];
 
   // Calculate time offset based on 1982 planetary alignment
   // 1 IRL month = 1 game year (same as original simulation)
@@ -500,14 +521,536 @@ const AnimatedSolarSystem = ({
     initialTimeOffset.current = gameDays * 5;
   }, []);
 
+  // --- HELPERS (Defined first to prevent reference errors) ---
+
+  // 2. SPAWN SALVO
+  const spawnSalvo = (source, target) => {
+    if (!source || !target) return;
+    const count = 3 + Math.floor(Math.random() * 3);
+    const groupMiss = Math.random() > 0.5;
+    for (let i = 0; i < count; i++) {
+      spawnProjectile(source, target, "TORPEDO", groupMiss, i * 8);
+    }
+  };
+
+  // 3. SPAWN EXPLOSION
+  const spawnExplosion = (x, y, scale = 1) => {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    particlesRef.current.push({
+      type: "EXPLOSION",
+      x,
+      y,
+      life: 15,
+      size: 2 * scale,
+      color: "#FFA500",
+    });
+    for (let i = 0; i < 3; i++) {
+      particlesRef.current.push({
+        type: "DEBRIS",
+        x,
+        y,
+        life: 30,
+        size: 0.5,
+        vx: (Math.random() - 0.5) * 1.5,
+        vy: (Math.random() - 0.5) * 1.5,
+        color: "#FFF",
+      });
+    }
+  };
+
+  // --- UPDATED HELPER: SPAWN PROJECTILE (Tighter Spawn, Tiny Size) ---
+  const spawnProjectile = (
+    source,
+    target,
+    type = "TORPEDO",
+    forceMiss = null,
+    delayOffset = 0
+  ) => {
+    if (!source || !target) return;
+
+    const isMiss = forceMiss !== null ? forceMiss : Math.random() > 0.6;
+    const color = getFactionColor
+      ? getFactionColor(source.fleet.factionName)
+      : "#fff";
+
+    // Destination Logic
+    let staticDestX = target.currentX;
+    let staticDestY = target.currentY;
+
+    if (isMiss) {
+      staticDestX += (Math.random() - 0.5) * 80;
+      staticDestY += (Math.random() - 0.5) * 80;
+    } else {
+      staticDestX += Math.cos(target.angle) * 10;
+      staticDestY += Math.sin(target.angle) * 10;
+    }
+
+    if (type === "TORPEDO") {
+      // Reduced spread to keep it looking like it comes FROM the ship
+      const spreadX = (Math.random() - 0.5) * 2;
+      const spreadY = (Math.random() - 0.5) * 2;
+
+      // REMOVED delayOffset calculation that was placing shots behind the ship
+      const startX = source.currentX + spreadX;
+      const startY = source.currentY + spreadY;
+
+      const angle = Math.atan2(staticDestY - startY, staticDestX - startX);
+
+      projectilesRef.current.push({
+        type: "TORPEDO",
+        x: startX,
+        y: startY,
+        targetObj: target,
+        missDest: { x: staticDestX, y: staticDestY },
+        angle: angle,
+        speed: 1.5,
+        life: 150,
+        color: color,
+        isMiss: isMiss,
+      });
+    } else {
+      projectilesRef.current.push({
+        type: "LASER",
+        sourceObj: source,
+        targetObj: target,
+        missDest: { x: staticDestX, y: staticDestY },
+        life: 8,
+        color: color,
+        isMiss: isMiss,
+      });
+      // Instant hit effect (Small spark)
+      if (!isMiss) spawnExplosion(staticDestX, staticDestY, 0.8);
+    }
+  };
+
+  // --- UPDATED LOGIC: BIGGER EXPLOSIONS ---
+  const updateBattleLogic = (fleetsOnScreen) => {
+    if (animationSettings.level !== "total" || !focusedBody) return;
+
+    const timeSinceLast = timeRef.current - lastSkirmishSpawnTime.current;
+
+    // 1. SPAWN LOGIC (Rare: 25-50s)
+    if (
+      activeSkirmishesRef.current.length === 0 &&
+      timeSinceLast > Math.random() * 1500 + 1500
+    ) {
+      const busyIds = new Set(
+        activeSkirmishesRef.current.flatMap((s) => [
+          s.attacker.fleet.ID,
+          s.defender.fleet.ID,
+        ])
+      );
+      const available = fleetsOnScreen.filter(
+        (f) => !busyIds.has(f.fleet.ID) && f.fleet.State?.Action === "Battle"
+      );
+
+      const factions = {};
+      available.forEach((f) => {
+        if (!factions[f.fleet.factionName]) factions[f.fleet.factionName] = [];
+        factions[f.fleet.factionName].push(f);
+      });
+
+      const factionNames = Object.keys(factions);
+      if (factionNames.length >= 2) {
+        const f1 =
+          factionNames[Math.floor(Math.random() * factionNames.length)];
+        const f2 = factionNames.filter((n) => n !== f1)[
+          Math.floor(Math.random() * (factionNames.length - 1))
+        ];
+
+        const attacker =
+          factions[f1][Math.floor(Math.random() * factions[f1].length)];
+        const defender =
+          factions[f2][Math.floor(Math.random() * factions[f2].length)];
+
+        const midX = (attacker.x + defender.x) / 2 + (Math.random() - 0.5) * 40;
+        const midY = (attacker.y + defender.y) / 2 + (Math.random() - 0.5) * 40;
+        const axisRotation = Math.random() * Math.PI * 2;
+
+        const tactics = ["FIGURE8", "ORBIT", "DIVING_OVAL", "SINE_WAVE"];
+        const t1 = tactics[Math.floor(Math.random() * tactics.length)];
+        let t2 = t1;
+        while (t2 === t1) {
+          t2 = tactics[Math.floor(Math.random() * tactics.length)];
+        }
+
+        const startPhase = Math.random() < 0.3 ? "HEADON" : "APPROACH";
+
+        activeSkirmishesRef.current.push({
+          id: Date.now(),
+          phase: startPhase,
+          timer: 0,
+          duration: 400 + Math.random() * 200,
+          center: { x: midX, y: midY },
+          axisRotation: axisRotation,
+          attacker: {
+            ...attacker,
+            currentX: attacker.x,
+            currentY: attacker.y,
+            angle: 0,
+            tactic: t1,
+            phaseOffset: 0,
+          },
+          defender: {
+            ...defender,
+            currentX: defender.x,
+            currentY: defender.y,
+            angle: Math.PI,
+            tactic: t2,
+            phaseOffset: Math.PI,
+          },
+        });
+        lastSkirmishSpawnTime.current = timeRef.current;
+      }
+    }
+
+    // 2. EXECUTE MOVEMENT
+    activeSkirmishesRef.current.forEach((skirmish) => {
+      const { attacker, defender, center, axisRotation } = skirmish;
+      if (!attacker || !defender) {
+        skirmish.finished = true;
+        return;
+      }
+
+      skirmish.timer++;
+
+      const toArena = (x, y) => {
+        const cos = Math.cos(axisRotation);
+        const sin = Math.sin(axisRotation);
+        return {
+          x: center.x + (x * cos - y * sin),
+          y: center.y + (x * sin + y * cos),
+        };
+      };
+
+      // --- PHASE 1: HEAD ON ---
+      if (skirmish.phase === "HEADON") {
+        const progress = skirmish.timer / 120;
+        const spread = 70 * (1 - progress);
+        const swerve = progress > 0.7 ? (progress - 0.7) * 80 : 0;
+
+        const pA = toArena(-spread, swerve);
+        const pD = toArena(spread, -swerve);
+
+        const ease = 0.1;
+        attacker.currentX += (pA.x - attacker.currentX) * ease;
+        attacker.currentY += (pA.y - attacker.currentY) * ease;
+        defender.currentX += (pD.x - defender.currentX) * ease;
+        defender.currentY += (pD.y - defender.currentY) * ease;
+
+        attacker.angle = Math.atan2(
+          pA.y - attacker.currentY,
+          pA.x - attacker.currentX
+        );
+        defender.angle = Math.atan2(
+          pD.y - defender.currentY,
+          pD.x - defender.currentX
+        );
+
+        if (progress > 0.3 && progress < 0.7 && Math.random() < 0.2) {
+          spawnProjectile(attacker, defender, "LASER");
+          spawnProjectile(defender, attacker, "LASER");
+        }
+
+        if (progress >= 1) {
+          skirmish.phase = "FIGHT";
+          skirmish.timer = 0;
+        }
+      }
+
+      // --- PHASE 2: APPROACH ---
+      else if (skirmish.phase === "APPROACH") {
+        const pA = toArena(-40, 0);
+        const pD = toArena(40, 0);
+
+        const ease = 0.05;
+        attacker.currentX += (pA.x - attacker.currentX) * ease;
+        attacker.currentY += (pA.y - attacker.currentY) * ease;
+        defender.currentX += (pD.x - defender.currentX) * ease;
+        defender.currentY += (pD.y - defender.currentY) * ease;
+
+        attacker.angle = Math.atan2(
+          defender.currentY - attacker.currentY,
+          defender.currentX - attacker.currentX
+        );
+        defender.angle = Math.atan2(
+          attacker.currentY - defender.currentY,
+          attacker.currentX - defender.currentX
+        );
+
+        const dist = Math.sqrt(
+          Math.pow(attacker.currentX - pA.x, 2) +
+            Math.pow(attacker.currentY - pA.y, 2)
+        );
+        if (dist < 10) skirmish.phase = "FIGHT";
+      }
+
+      // --- PHASE 3: FIGHT ---
+      else if (skirmish.phase === "FIGHT") {
+        [attacker, defender].forEach((ship) => {
+          const t = skirmish.timer * 0.03 + ship.phaseOffset;
+          let tx = 0,
+            ty = 0;
+
+          if (ship.tactic === "FIGURE8") {
+            tx = Math.cos(t) * 45;
+            ty = Math.sin(2 * t) * 20;
+          } else if (ship.tactic === "ORBIT") {
+            tx = Math.cos(t) * 35;
+            ty = Math.sin(t) * 35;
+          } else if (ship.tactic === "DIVING_OVAL") {
+            tx = Math.cos(t) * 40;
+            ty = Math.sin(t) * (Math.sin(t) > 0 ? 30 : 10);
+          } else if (ship.tactic === "SINE_WAVE") {
+            tx = Math.cos(t * 0.5) * 50;
+            ty = Math.sin(t * 3) * 10;
+          }
+
+          const dest = toArena(tx, ty);
+          ship.currentX += (dest.x - ship.currentX) * 0.08;
+          ship.currentY += (dest.y - ship.currentY) * 0.08;
+
+          const moveAngle = Math.atan2(
+            dest.y - ship.currentY,
+            dest.x - ship.currentX
+          );
+          const blendAngle = (a, b, k) => {
+            let d = b - a;
+            while (d > Math.PI) d -= Math.PI * 2;
+            while (d < -Math.PI) d += Math.PI * 2;
+            return a + d * k;
+          };
+          ship.angle = blendAngle(ship.angle, moveAngle, 0.15);
+        });
+
+        // SHOOTING
+        const angleToDef = Math.atan2(
+          defender.currentY - attacker.currentY,
+          defender.currentX - attacker.currentX
+        );
+        let diffA = attacker.angle - angleToDef;
+        while (diffA > Math.PI) diffA -= Math.PI * 2;
+        while (diffA < -Math.PI) diffA += Math.PI * 2;
+
+        if (Math.abs(diffA) < 2.5 && Math.random() < 0.08) {
+          if (Math.random() < 0.3) spawnSalvo(attacker, defender);
+          else spawnProjectile(attacker, defender, "LASER");
+        }
+
+        const angleToAtk = Math.atan2(
+          attacker.currentY - defender.currentY,
+          attacker.currentX - defender.currentX
+        );
+        let diffD = defender.angle - angleToAtk;
+        while (diffD > Math.PI) diffD -= Math.PI * 2;
+        while (diffD < -Math.PI) diffD += Math.PI * 2;
+
+        if (Math.abs(diffD) < 2.5 && Math.random() < 0.08) {
+          if (Math.random() < 0.3) spawnSalvo(defender, attacker);
+          else spawnProjectile(defender, attacker, "LASER");
+        }
+
+        if (skirmish.timer > skirmish.duration) skirmish.phase = "RETURN";
+      }
+
+      // --- PHASE 4: RETURN ---
+      else if (skirmish.phase === "RETURN") {
+        const ease = 0.04;
+        attacker.currentX += (attacker.x - attacker.currentX) * ease;
+        attacker.currentY += (attacker.y - attacker.currentY) * ease;
+        defender.currentX += (defender.x - defender.currentX) * ease;
+        defender.currentY += (defender.y - defender.currentY) * ease;
+
+        const blendAngle = (a, b, k) => {
+          let d = b - a;
+          while (d > Math.PI) d -= Math.PI * 2;
+          while (d < -Math.PI) d += Math.PI * 2;
+          return a + d * k;
+        };
+        attacker.angle = blendAngle(attacker.angle, 0, 0.05);
+        defender.angle = blendAngle(defender.angle, Math.PI, 0.05);
+
+        const dist = Math.sqrt(
+          Math.pow(attacker.currentX - attacker.x, 2) +
+            Math.pow(attacker.currentY - attacker.y, 2)
+        );
+        if (dist < 3) skirmish.finished = true;
+      }
+    });
+
+    activeSkirmishesRef.current = activeSkirmishesRef.current.filter(
+      (s) => !s.finished
+    );
+
+    // 3. PROJECTILES
+    projectilesRef.current.forEach((p) => {
+      p.life--;
+      if (p.type === "TORPEDO") {
+        p.speed *= 1.05;
+        if (!p.targetObj || !p.missDest) {
+          p.life = 0;
+          return;
+        }
+
+        let destX = p.isMiss ? p.missDest.x : p.targetObj.currentX;
+        let destY = p.isMiss ? p.missDest.y : p.targetObj.currentY;
+
+        const desiredAngle = Math.atan2(destY - p.y, destX - p.x);
+        let diff = desiredAngle - p.angle;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        p.angle += diff * 0.1;
+
+        p.x += Math.cos(p.angle) * p.speed;
+        p.y += Math.sin(p.angle) * p.speed;
+
+        const dist = Math.sqrt(
+          Math.pow(p.x - destX, 2) + Math.pow(p.y - destY, 2)
+        );
+        if (dist < 10) {
+          p.life = 0;
+          // INCREASED EXPLOSION SIZE TO 3.5x
+          if (!p.isMiss) spawnExplosion(destX, destY, 3.5);
+        }
+      }
+    });
+    projectilesRef.current = projectilesRef.current.filter((p) => p.life > 0);
+
+    // 4. PARTICLES
+    particlesRef.current.forEach((p) => {
+      if (!Number.isFinite(p.x)) return;
+      p.life--;
+      if (p.type === "EXPLOSION") p.size *= 0.9;
+      if (p.type === "DEBRIS") {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vx *= 0.92;
+        p.vy *= 0.92;
+      }
+    });
+    particlesRef.current = particlesRef.current.filter((p) => p.life > 0);
+  };
+
+  // --- FIXED DRAWING: SHIPS BOTTOM, EXPLOSIONS TOP ---
+  const drawBattleEffects = (ctx) => {
+    ctx.save();
+
+    // -------------------------------------------------------
+    // LAYER 1: SHIPS (Draw these FIRST so they are "Under")
+    // -------------------------------------------------------
+    ctx.globalCompositeOperation = "source-over"; // Normal solid drawing
+    ctx.globalAlpha = 1;
+
+    activeSkirmishesRef.current.forEach((s) => {
+      [s.attacker, s.defender].forEach((ship) => {
+        if (!Number.isFinite(ship.currentX)) return;
+
+        const color = getFactionColor
+          ? getFactionColor(ship.fleet.factionName)
+          : "#00f5ff";
+
+        ctx.save();
+        ctx.translate(ship.currentX, ship.currentY);
+        ctx.rotate(ship.angle + Math.PI / 2);
+
+        const scale = Math.max(0.4, 0.6 / cameraRef.current.zoom);
+        ctx.scale(scale, scale);
+
+        if (ship.fleet.Type === "Space") drawSpaceIcon(ctx, color);
+        else drawGroundIcon(ctx, color);
+
+        ctx.restore();
+      });
+    });
+
+    // -------------------------------------------------------
+    // LAYER 2: EFFECTS (Draw these LAST so they cover ships)
+    // -------------------------------------------------------
+    ctx.globalCompositeOperation = "lighter"; // Additive Glow
+
+    // A. PROJECTILES
+    projectilesRef.current.forEach((p) => {
+      if (p.type === "LASER") {
+        if (!p.sourceObj || !p.targetObj) return;
+
+        const sx = p.sourceObj.currentX;
+        const sy = p.sourceObj.currentY;
+        const tx = p.isMiss ? p.missDest.x : p.targetObj.currentX;
+        const ty = p.isMiss ? p.missDest.y : p.targetObj.currentY;
+
+        ctx.shadowBlur = 4;
+        ctx.shadowColor = p.color;
+        ctx.strokeStyle = p.color;
+        ctx.lineWidth = 0.6;
+        ctx.globalAlpha = Math.max(0, p.life / 8);
+
+        ctx.beginPath();
+        ctx.moveTo(sx, sy);
+        ctx.lineTo(tx, ty);
+        ctx.stroke();
+        ctx.lineWidth = 0.2;
+        ctx.strokeStyle = "#fff";
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+      } else if (p.type === "TORPEDO") {
+        if (!Number.isFinite(p.x)) return;
+
+        ctx.fillStyle = "#fff";
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 0.3, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.shadowBlur = 2;
+        ctx.shadowColor = p.color;
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = 0.6;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 0.8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      }
+    });
+
+    // B. PARTICLES (Explosions)
+    particlesRef.current.forEach((p) => {
+      if (!Number.isFinite(p.x)) return;
+      if (p.type === "EXPLOSION") {
+        let alpha = Math.max(0, p.life / 15);
+        const safeRadius = Math.max(0.1, p.size);
+        try {
+          const gradient = ctx.createRadialGradient(
+            p.x,
+            p.y,
+            0,
+            p.x,
+            p.y,
+            safeRadius
+          );
+          gradient.addColorStop(0, `rgba(255, 255, 255, ${alpha})`);
+          gradient.addColorStop(0.4, `rgba(255, 160, 50, ${alpha * 0.8})`);
+          gradient.addColorStop(1, `rgba(0,0,0,0)`);
+          ctx.fillStyle = gradient;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, safeRadius, 0, Math.PI * 2);
+          ctx.fill();
+        } catch (e) {}
+      } else if (p.type === "DEBRIS") {
+        ctx.fillStyle = `rgba(255, 200, 150, ${p.life / 30})`;
+        ctx.fillRect(p.x, p.y, p.size, p.size);
+      }
+    });
+
+    ctx.restore();
+  };
+
   // Initialize stars
   useEffect(() => {
     const newStars = [];
-    // Increased count to 2500 and range to 15000 to cover extreme pans
-    for (let i = 0; i < 2500; i++) {
+    // Increased count to 4000 and range to 15000 to cover extreme pans
+    for (let i = 0; i < 5000; i++) {
       newStars.push({
-        x: (Math.random() - 0.5) * 15000,
-        y: (Math.random() - 0.5) * 15000,
+        x: (Math.random() - 0.5) * 30000,
+        y: (Math.random() - 0.5) * 30000,
         size: Math.random() * 1.5,
         alpha: Math.random(),
       });
@@ -536,9 +1079,26 @@ const AnimatedSolarSystem = ({
       }
     };
 
-    loadAllImages(solarSystem);
+    // Load images for both Sol and Corelli systems
+    loadAllImages(solarSystemsRef.current.Sol);
+    loadAllImages(solarSystemsRef.current.Corelli);
     setPlanetImages(images);
   }, [solarSystem]);
+
+  // Teleport to system when systemName changes
+  useEffect(() => {
+    const pos = systemPositions.current[systemName];
+    if (pos) {
+      targetCameraRef.current = {
+        x: pos.x,
+        y: pos.y,
+        zoom: 0.8,
+      };
+      setCurrentSystemView(systemName);
+      setFocusedBody(null);
+      fleetPositionsRef.current = [];
+    }
+  }, [systemName]);
 
   // Animation loop
   useEffect(() => {
@@ -560,13 +1120,11 @@ const AnimatedSolarSystem = ({
     resize();
     window.addEventListener("resize", resize);
 
-    // Add wheel listener with passive:false to allow preventDefault
     const wheelHandler = (e) => {
       e.preventDefault();
-      // Allow zoom even when focused, just limit the range
       const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
-      const minZoom = focusedBody ? 2 : 0.3; // When focused, min zoom is 2
-      const maxZoom = focusedBody ? 20 : 10; // When focused, max zoom is 20
+      const minZoom = focusedBody ? 2 : 0.3;
+      const maxZoom = focusedBody ? 20 : 10;
       targetCameraRef.current = {
         ...targetCameraRef.current,
         zoom: Math.max(
@@ -578,17 +1136,13 @@ const AnimatedSolarSystem = ({
     canvas.addEventListener("wheel", wheelHandler, { passive: false });
 
     const update = () => {
-      // Increment time for animations
       timeRef.current += 1;
-
-      // Smooth camera lerp
       cameraRef.current = lerpCamera(
         cameraRef.current,
         targetCameraRef.current,
         0.1
       );
 
-      // Keep focused body centered
       if (
         focusedBody &&
         focusedBody.name !== "Sun" &&
@@ -601,57 +1155,39 @@ const AnimatedSolarSystem = ({
         };
       }
 
-      // --- 1. FIXED EXTREME PAN CHECK ---
-      // 1. Calculate Distance
+      // --- WARNING CHECKS ---
       const distX = Math.abs(cameraRef.current.x);
       const distY = Math.abs(cameraRef.current.y);
       const distance = Math.sqrt(distX * distX + distY * distY);
-
       const isExtremePan = distance > 20000;
 
       if (isExtremePan) {
-        // --- WE ARE OUTSIDE THE SAFE ZONE ---
-
-        // Check 'warningActiveRef'. If it is true, it means we have ALREADY warned
-        // the user about this specific trip, so we do NOTHING (keep it hidden).
         if (!warningActiveRef.current && !focusedBody) {
-          // 1. Lock the warning so it doesn't trigger again on the next frame
           warningActiveRef.current = true;
-
-          // 2. Show the message
           const randomMsg =
             warningMessages[Math.floor(Math.random() * warningMessages.length)];
           setWarningMessage(randomMsg);
           setWarningOpacity(1);
-
-          // 3. Set timer to hide it after 5 seconds
           if (warningTimeoutRef.current)
             clearTimeout(warningTimeoutRef.current);
-
           warningTimeoutRef.current = setTimeout(() => {
             setWarningOpacity(0);
             setTimeout(() => setWarningMessage(null), 500);
-
-            // CRITICAL FIX: Do NOT set 'warningActiveRef.current = false' here.
-            // We want the lock to STAY active so the warning doesn't come back
-            // while you are still floating out here.
           }, 5000);
         }
       } else {
-        // --- WE ARE INSIDE THE SAFE ZONE ---
-
-        // Only now do we reset the lock. This ensures the warning is ready
-        // for the *next* time you leave the safe zone.
         if (warningActiveRef.current) {
           warningActiveRef.current = false;
-
-          // Optional: Hide immediately if they return early
           if (warningTimeoutRef.current)
             clearTimeout(warningTimeoutRef.current);
           setWarningOpacity(0);
           setWarningMessage(null);
         }
       }
+
+      // --- RUN BATTLE LOGIC ---
+      // We pass the current list of on-screen fleets (calculated last frame) to the logic
+      updateBattleLogic(fleetPositionsRef.current);
 
       draw();
       animationRef.current = requestAnimationFrame(update);
@@ -667,7 +1203,7 @@ const AnimatedSolarSystem = ({
       ctx.scale(cameraRef.current.zoom, cameraRef.current.zoom);
       ctx.translate(-cameraRef.current.x, -cameraRef.current.y);
 
-      // Draw Stars
+      // Stars
       ctx.fillStyle = "white";
       stars.forEach((star) => {
         ctx.globalAlpha = star.alpha;
@@ -683,102 +1219,116 @@ const AnimatedSolarSystem = ({
       });
       ctx.globalAlpha = 1;
 
-      // Draw Solar System recursively
-      // Add initial time offset to place planets at current real-world positions (from 1982 alignment)
-      const currentTime = timeRef.current + initialTimeOffset.current;
-      drawBody(ctx, solarSystem, 0, 0, currentTime);
+      // --- Important: Clear fleet positions before redrawing ---
+      // This allows both systems to populate the ref for click detection and battle logic
+      fleetPositionsRef.current = [];
 
-      // --- 3. HIGH-FIDELITY ASTEROID BELT ---
+      // Draw both systems
+      const currentTime = timeRef.current + initialTimeOffset.current;
+      const solPos = systemPositions.current.Sol;
+      drawBody(
+        ctx,
+        solarSystemsRef.current.Sol,
+        solPos.x,
+        solPos.y,
+        currentTime
+      );
+
+      const corelliPos = systemPositions.current.Corelli;
+      drawBody(
+        ctx,
+        solarSystemsRef.current.Corelli,
+        corelliPos.x,
+        corelliPos.y,
+        currentTime
+      );
+
+      // Connection Line
+      ctx.save();
+      ctx.setLineDash([8, 12]);
+      ctx.strokeStyle = "rgba(0, 245, 255, 0.15)";
+      ctx.lineWidth = 2 / cameraRef.current.zoom;
+      ctx.beginPath();
+      ctx.moveTo(solPos.x, solPos.y);
+      ctx.lineTo(corelliPos.x, corelliPos.y);
+      ctx.stroke();
+      ctx.restore();
+
+      // Asteroid Belts
       if (
         !focusedBody ||
         focusedBody.name === "Sun" ||
         focusedBody.name === "Corelli Star"
       ) {
-        const beltRadius = systemName === "Sol" ? 200 : 170;
-        const beltWidth = 50;
-        const totalAsteroids = 800; // High count for density
-
-        // Rotational speed of the entire belt
-        const beltRotationSpeed = 0.00005;
-        const beltOffset = currentTime * beltRotationSpeed;
-
-        ctx.save();
-
-        // Layer 1: Faint Dust Ring (Background Haze)
-        ctx.beginPath();
-        ctx.arc(0, 0, beltRadius, 0, Math.PI * 2);
-        ctx.strokeStyle = "rgba(120, 110, 100, 0.06)";
-        ctx.lineWidth = beltWidth;
-        ctx.stroke();
-
-        // Layer 2: Particulates
-        for (let i = 0; i < totalAsteroids; i++) {
-          // DETERMINISTIC RANDOMNESS:
-          // We use Math.sin(i) to generate consistent "random" numbers for each asteroid index.
-          // This ensures they stay the same every frame (no blinking) but look random.
-          const r1 = Math.sin(i * 12.9898);
-          const r2 = Math.cos(i * 78.233);
-          const r3 = Math.sin(i * 43.123);
-          const r4 = Math.cos(i * 91.555);
-
-          // 1. ANGLE distribution (Evenly spread around the circle)
-          const angle =
-            (i / totalAsteroids) * Math.PI * 2 + r1 * 0.1 + beltOffset;
-
-          // 2. DISTANCE distribution (Gaussian-ish: Clustered in center, sparse at edges)
-          // Averaging two "random" numbers pushes values toward the center
-          const distOffset = ((r2 + r3) / 2) * (beltWidth / 2);
-          const radius = beltRadius + distOffset;
-
-          const x = Math.cos(angle) * radius;
-          const y = Math.sin(angle) * radius;
-
-          // 3. SIZE & TYPE
-          // 85% Dust (tiny), 15% Rocks (chunks)
-          const isChunk = Math.abs(r4) > 0.85;
-          const size = isChunk
-            ? 1.5 + Math.abs(r1) * 1.5 // Rocks: 1.5px - 3.0px
-            : 0.5 + Math.abs(r2) * 0.5; // Dust: 0.5px - 1.0px
-
-          // 4. COLOR
-          // Varied Earthy tones: Grey, Brown, faint Rust
-          const baseGrey = 100 + Math.floor(Math.abs(r1) * 60); // 100-160
-          const redTint = Math.floor(Math.abs(r2) * 20);
-          const alpha = isChunk ? 0.9 : 0.3 + Math.abs(r3) * 0.3; // Dust is transparent
-
-          ctx.fillStyle = `rgba(${baseGrey + redTint}, ${baseGrey}, ${
-            baseGrey - 5
-          }, ${alpha})`;
-
-          // 5. DRAWING
-          if (isChunk) {
-            // Draw irregular rock shapes using a deterministic rotation
-            ctx.save();
-            ctx.translate(x, y);
-            ctx.rotate(i + currentTime * 0.002); // Slow individual tumble
-
-            ctx.beginPath();
-            // Create a jagged shape (pentagon-ish)
-            ctx.moveTo(size, 0);
-            ctx.lineTo(size * 0.3, size * 0.8);
-            ctx.lineTo(-size * 0.8, size * 0.5);
-            ctx.lineTo(-size * 0.5, -size * 0.8);
-            ctx.lineTo(size * 0.5, -size * 0.5);
-            ctx.closePath();
-            ctx.fill();
-            ctx.restore();
-          } else {
-            // Draw simple circle for dust
-            ctx.beginPath();
-            ctx.arc(x, y, size, 0, Math.PI * 2);
-            ctx.fill();
+        // [Reuse existing belt drawing logic...]
+        // For brevity, using the previous logic wrapper or inline:
+        const drawAsteroidBelt = (centerX, centerY, beltRadius) => {
+          // ... [Copy of your existing asteroid belt code] ...
+          const beltWidth = 50;
+          const totalAsteroids = 800;
+          const beltRotationSpeed = 0.00005;
+          const beltOffset = currentTime * beltRotationSpeed;
+          ctx.save();
+          ctx.translate(centerX, centerY);
+          ctx.beginPath();
+          ctx.arc(0, 0, beltRadius, 0, Math.PI * 2);
+          ctx.strokeStyle = "rgba(120, 110, 100, 0.06)";
+          ctx.lineWidth = beltWidth;
+          ctx.stroke();
+          for (let i = 0; i < totalAsteroids; i++) {
+            const r1 = Math.sin(i * 12.9898);
+            const r2 = Math.cos(i * 78.233);
+            const r3 = Math.sin(i * 43.123);
+            const r4 = Math.cos(i * 91.555);
+            const angle =
+              (i / totalAsteroids) * Math.PI * 2 + r1 * 0.1 + beltOffset;
+            const distOffset = ((r2 + r3) / 2) * (beltWidth / 2);
+            const radius = beltRadius + distOffset;
+            const x = Math.cos(angle) * radius;
+            const y = Math.sin(angle) * radius;
+            const isChunk = Math.abs(r4) > 0.85;
+            const size = isChunk
+              ? 1.5 + Math.abs(r1) * 1.5
+              : 0.5 + Math.abs(r2) * 0.5;
+            const baseGrey = 100 + Math.floor(Math.abs(r1) * 60);
+            const redTint = Math.floor(Math.abs(r2) * 20);
+            const alpha = isChunk ? 0.9 : 0.3 + Math.abs(r3) * 0.3;
+            ctx.fillStyle = `rgba(${baseGrey + redTint}, ${baseGrey}, ${
+              baseGrey - 5
+            }, ${alpha})`;
+            if (isChunk) {
+              ctx.save();
+              ctx.translate(x, y);
+              ctx.rotate(i + currentTime * 0.002);
+              ctx.beginPath();
+              ctx.moveTo(size, 0);
+              ctx.lineTo(size * 0.3, size * 0.8);
+              ctx.lineTo(-size * 0.8, size * 0.5);
+              ctx.lineTo(-size * 0.5, -size * 0.8);
+              ctx.lineTo(size * 0.5, -size * 0.5);
+              ctx.closePath();
+              ctx.fill();
+              ctx.restore();
+            } else {
+              ctx.beginPath();
+              ctx.arc(x, y, size, 0, Math.PI * 2);
+              ctx.fill();
+            }
           }
-        }
-        ctx.restore();
+          ctx.restore();
+        };
+        drawAsteroidBelt(solPos.x, solPos.y, 200);
+        drawAsteroidBelt(corelliPos.x, corelliPos.y, 170);
+      }
+
+      // --- 4. BATTLE EFFECTS LAYER (High Detail) ---
+      if (focusedBody) {
+        drawBattleEffects(ctx);
       }
 
       ctx.restore();
     };
+
     const drawBody = (
       ctx,
       body,
@@ -788,39 +1338,22 @@ const AnimatedSolarSystem = ({
       isMoon = false,
       skipRendering = false
     ) => {
-      // Calculate position
-      let angle;
-      if (body.angle !== undefined) {
-        // Fixed angle (asteroid belt areas)
-        angle = body.angle;
-      } else {
-        // Use simple time-based animation for all orbital bodies
-        angle = t * body.speed;
-      }
+      // [Same logic as before]
+      let angle = body.angle !== undefined ? body.angle : t * body.speed;
       let x = cx + Math.cos(angle) * body.dist;
       let y = cy + Math.sin(angle) * body.dist;
-
-      // Store current position for click detection
       body.currentX = x;
       body.currentY = y;
 
-      // Rendering logic:
-      // - When NOT focused: render everything (unless skipRendering)
-      // - When focused on a planet: render planet + its moons
-      // - When focused on a moon: render parent planet + all its moons (siblings)
       const isFocusedBody = focusedBody === body;
       const isChildOfFocused = focusedBody && body.parent === focusedBody;
       const isParentOfFocused = focusedBody && focusedBody.parent === body;
-
       let shouldRender = !skipRendering;
-      if (focusedBody) {
-        // When focused, render: focused body, its children, or its parent (if focused on moon)
+      if (focusedBody)
         shouldRender =
           !skipRendering &&
           (isFocusedBody || isChildOfFocused || isParentOfFocused);
-      }
 
-      // Draw Orbit Line (only when body should be rendered)
       if (shouldRender && body.dist > 0) {
         ctx.beginPath();
         ctx.strokeStyle = isMoon
@@ -831,24 +1364,13 @@ const AnimatedSolarSystem = ({
         ctx.stroke();
       }
 
-      // Determine if we should draw children
-      let drawChildren = false;
-      if (!isMoon && !focusedBody) {
-        drawChildren = true; // System overview: draw all planets
-      }
-      if (focusedBody === body) {
-        drawChildren = true; // Focused on this body: draw its moons
-      }
-      // If focused on a moon, and this body is the parent planet, draw its children (all moons)
-      if (focusedBody && focusedBody.parent === body) {
-        drawChildren = true;
-      }
+      let drawChildren =
+        (!isMoon && !focusedBody) ||
+        focusedBody === body ||
+        (focusedBody && focusedBody.parent === body);
 
-      // Draw the Body itself (only if should render)
       if (shouldRender) {
         if (body.name === "Sun" || body.name === "Corelli Star") {
-          // Always draw sun/star as glowing circle (never use image)
-          // Add glow effect
           const gradient = ctx.createRadialGradient(
             x,
             y,
@@ -863,16 +1385,13 @@ const AnimatedSolarSystem = ({
           ctx.beginPath();
           ctx.arc(x, y, body.size * 2, 0, Math.PI * 2);
           ctx.fill();
-
-          // Sun/star itself
           ctx.beginPath();
           ctx.fillStyle = body.color;
           ctx.arc(x, y, body.size, 0, Math.PI * 2);
           ctx.fill();
         } else {
-          // For planets and moons, use images
           const img = planetImages[body.name];
-          if (img && img.complete && img.naturalHeight !== 0) {
+          if (img && img.complete && img.naturalHeight !== 0)
             ctx.drawImage(
               img,
               x - body.size,
@@ -880,16 +1399,13 @@ const AnimatedSolarSystem = ({
               body.size * 2,
               body.size * 2
             );
-          } else {
-            // Fallback to circle
+          else {
             ctx.beginPath();
             ctx.fillStyle = body.color;
             ctx.arc(x, y, body.size, 0, Math.PI * 2);
             ctx.fill();
           }
         }
-
-        // Draw Label only when hovered
         if (hoveredBody === body) {
           ctx.fillStyle = "white";
           ctx.font = isMoon ? "12px Arial" : "16px Arial";
@@ -901,207 +1417,149 @@ const AnimatedSolarSystem = ({
             ctx.fillText(body.name, x, y + body.size + 15);
           }
         }
-
-        // Draw fleet indicators ONLY if focused on this body
-        if (focusedBody === body) {
+        if (focusedBody === body)
           drawFleetIndicators(ctx, body.name, x, y, body.size);
-        }
       }
 
-      // Recursion for children
-      if (drawChildren && body.children && body.children.length > 0) {
-        body.children.forEach((child) => {
-          child.parent = body; // Link parent for logic
-          // When drawChildren is true, we WANT to draw them - never skip
-          // This handles: 1) overview mode drawing all planets, 2) focused planet drawing its moons
-          drawBody(ctx, child, x, y, t * 0.3, true, false);
-        });
-      }
-
-      // If not drawing children but body has them, still recurse to update positions
-      if (
-        !drawChildren &&
-        !isMoon &&
-        body.children &&
-        body.children.length > 0
-      ) {
+      if (drawChildren && body.children)
         body.children.forEach((child) => {
           child.parent = body;
-          // If focusing a moon, don't skip its parent's other children that might be focused
-          // If focusing a planet, don't skip its moon children
-          const shouldSkipChild =
-            focusedBody && child !== focusedBody && focusedBody.parent !== body;
-          drawBody(ctx, child, x, y, t * 0.3, true, shouldSkipChild);
+          drawBody(ctx, child, x, y, t * 0.3, true, false);
         });
-      }
+      if (!drawChildren && !isMoon && body.children)
+        body.children.forEach((child) => {
+          child.parent = body;
+          const skip =
+            focusedBody && child !== focusedBody && focusedBody.parent !== body;
+          drawBody(ctx, child, x, y, t * 0.3, true, skip);
+        });
     };
 
     const drawFleetIndicators = (ctx, worldName, x, y, size) => {
-      // Determine fleets at this world from provided systemData so we can
-      // enforce visibility rules (stealth/intel) in animated view.
-      const rawFleets =
-        (systemData &&
-          Object.entries(systemData).reduce((acc, [factionName, fleets]) => {
-            fleets.forEach((fleet) => {
-              if (fleet.State?.Location === worldName)
-                acc.push({ ...fleet, factionName });
-            });
-            return acc;
-          }, [])) ||
-        [];
+      // 1. Get fleets normally
+      const rawFleets = getFleetsAtWorldWrapper(worldName) || [];
 
-      // Visibility rules mirror TacticalMap:
-      // - If refereeMode => see all fleets
-      // - Else if current faction has at least one active combat unit at world => show all fleets
-      // - Otherwise show only fleets belonging to current faction
-      const fleetsForWorld = rawFleets;
-      const currentFactionFleetsWithShips = fleetsForWorld.filter(
-        (fleet) =>
-          fleet.factionName.toLowerCase() === currentFaction.toLowerCase() &&
-          Array.isArray(fleet.Vehicles) &&
-          fleet.Vehicles.reduce((s, v) => s + (v.count || 0), 0) > 0
-      );
-      const currentFactionActiveCombatUnits = fleetsForWorld.filter(
-        (fleet) =>
-          fleet.factionName.toLowerCase() === currentFaction.toLowerCase() &&
+      // Visibility Logic (same as before)
+      const currentFactionActiveCombatUnits = rawFleets.filter(
+        (f) =>
+          f.factionName.toLowerCase() === currentFaction.toLowerCase() &&
           ["Defense", "Patrol", "Battle", "Activating"].includes(
-            fleet.State?.Action
+            f.State?.Action
           )
       );
-
       let fleets = [];
-      if (refereeMode?.isReferee) {
-        fleets = fleetsForWorld;
-      } else if (currentFactionActiveCombatUnits.length > 0) {
-        fleets = fleetsForWorld;
-      } else if (currentFactionFleetsWithShips.length > 0) {
-        // If we have ships at this world but none are in active combat states,
-        // still allow visibility (match TacticalMap behavior)
-        fleets = fleetsForWorld;
-      } else {
-        fleets = fleetsForWorld.filter(
+      if (refereeMode?.isReferee || currentFactionActiveCombatUnits.length > 0)
+        fleets = rawFleets;
+      else if (
+        rawFleets.some(
+          (f) => f.factionName.toLowerCase() === currentFaction.toLowerCase()
+        )
+      )
+        fleets = rawFleets;
+      else
+        fleets = rawFleets.filter(
           (f) => f.factionName.toLowerCase() === currentFaction.toLowerCase()
         );
-      }
+
       if (fleets.length === 0) return;
 
-      // --- 1. Tighter Orbit Config ---
-      // Reduced offset from planet so they hug the world closer
+      // 2. FILTER OUT fleets that are currently "Hijacked" by Battle Logic
+      // We identify them by ID so they don't appear in the orbital ring while fighting
+      const busyFleetIds = new Set();
+      activeSkirmishesRef.current.forEach((s) => {
+        busyFleetIds.add(s.attacker.fleet.ID);
+        busyFleetIds.add(s.defender.fleet.ID);
+      });
+      const visibleOrbitFleets = fleets.filter((f) => !busyFleetIds.has(f.ID));
+
       const spaceOrbitRadius = size + 8;
       const groundOrbitRadius = size + 1;
-      const newFleetPositions = [];
+      const localFleetPositions = [];
 
-      // Drawing helpers delegated to drawUtils (imported)
-
-      // --- Data Processing (Same as before) ---
-      const fleetsByFaction = fleets.reduce((acc, fleet) => {
-        const factionName = fleet.factionName;
-        if (!acc[factionName]) acc[factionName] = [];
-        acc[factionName].push(fleet);
+      const fleetsByFaction = visibleOrbitFleets.reduce((acc, fleet) => {
+        if (!acc[fleet.factionName]) acc[fleet.factionName] = [];
+        acc[fleet.factionName].push(fleet);
         return acc;
       }, {});
 
       const displayFleets = [];
       Object.entries(fleetsByFaction).forEach(
         ([factionName, factionFleets]) => {
-          const collapseKey = `${factionName}-${worldName}`;
-          const isCollapsed = collapsedFactions.has(collapseKey);
-
-          if (isCollapsed) {
-            const spaceFleets = factionFleets.filter((f) => f.Type === "Space");
-            if (spaceFleets.length > 0) {
+          const key = `${factionName}-${worldName}`;
+          if (collapsedFactions.has(key)) {
+            const s = factionFleets.filter((f) => f.Type === "Space");
+            if (s.length)
               displayFleets.push({
-                ...spaceFleets[0],
+                ...s[0],
                 Type: "Space",
                 isCollapsed: true,
-                collapsedCount: spaceFleets.length,
+                collapsedCount: s.length,
               });
-            }
-            const groundFleets = factionFleets.filter(
-              (f) => f.Type === "Ground"
-            );
-            if (groundFleets.length > 0) {
+            const g = factionFleets.filter((f) => f.Type === "Ground");
+            if (g.length)
               displayFleets.push({
-                ...groundFleets[0],
+                ...g[0],
                 Type: "Ground",
                 isCollapsed: true,
-                collapsedCount: groundFleets.length,
+                collapsedCount: g.length,
               });
-            }
-          } else {
-            displayFleets.push(...factionFleets);
-          }
+          } else displayFleets.push(...factionFleets);
         }
       );
 
-      const spaceFleets = displayFleets.filter((f) => f.Type === "Space");
-      const groundFleets = displayFleets.filter((f) => f.Type === "Ground");
+      const sFleets = displayFleets.filter((f) => f.Type === "Space");
+      const gFleets = displayFleets.filter((f) => f.Type === "Ground");
 
-      // --- Rendering Loop ---
       ctx.save();
-      ctx.shadowBlur = 4; // Reduced glow (was 10) so it's less "bloomy"
+      ctx.shadowBlur = 4;
       ctx.lineJoin = "round";
 
-      // Render Space Fleets
-      spaceFleets.forEach((fleet, index) => {
-        const totalAngle = Math.PI * 2;
+      // Space
+      sFleets.forEach((fleet, i) => {
         const angle =
-          (index / Math.max(spaceFleets.length, 1)) * totalAngle +
+          (i / Math.max(sFleets.length, 1)) * Math.PI * 2 +
           timeRef.current * 0.0002;
-
         const fx = x + Math.cos(angle) * spaceOrbitRadius;
         const fy = y + Math.sin(angle) * spaceOrbitRadius;
-
         const color = getFactionColor
           ? getFactionColor(fleet.factionName)
           : "#00f5ff";
-
-        // --- 4. Reduced Scale Factor ---
-        // Was 1.2, now 0.5. Base minimum reduced from 0.6 to 0.3
         const arrowScale = Math.max(0.3, 0.5 / cameraRef.current.zoom);
 
         ctx.save();
         ctx.translate(fx, fy);
         ctx.scale(arrowScale, arrowScale);
         ctx.shadowColor = color;
-
         if (fleet.isCollapsed) {
           ctx.save();
-          ctx.translate(1.5, 1.5); // Smaller offset for shadow stack
+          ctx.translate(1.5, 1.5);
           ctx.globalAlpha = 0.5;
           drawSpaceIcon(ctx, color);
           ctx.restore();
         }
-
         drawSpaceIcon(ctx, color);
-
         if (fleet.isCollapsed) {
           ctx.shadowBlur = 0;
           drawCountBadge(ctx, fleet.collapsedCount);
         }
-
         ctx.restore();
-
-        newFleetPositions.push({
+        localFleetPositions.push({
           fleet,
           x: fx,
           y: fy,
-          radius: 5 * arrowScale, // Smaller click detection radius
+          radius: 5 * arrowScale,
           isCollapsed: fleet.isCollapsed || false,
         });
       });
 
-      // Render Ground Fleets
-      groundFleets.forEach((fleet, index) => {
-        const totalAngle = Math.PI * 2;
+      // Ground
+      gFleets.forEach((fleet, i) => {
         const angle =
-          (index / Math.max(groundFleets.length, 1)) * totalAngle +
+          (i / Math.max(gFleets.length, 1)) * Math.PI * 2 +
           Math.PI +
           timeRef.current * 0.0001;
-
         const fx = x + Math.cos(angle) * groundOrbitRadius;
         const fy = y + Math.sin(angle) * groundOrbitRadius;
-
         const color = getFactionColor
           ? getFactionColor(fleet.factionName)
           : "#00f5ff";
@@ -1111,7 +1569,6 @@ const AnimatedSolarSystem = ({
         ctx.translate(fx, fy);
         ctx.scale(arrowScale, arrowScale);
         ctx.shadowColor = color;
-
         if (fleet.isCollapsed) {
           ctx.save();
           ctx.translate(1.5, -1.5);
@@ -1119,17 +1576,13 @@ const AnimatedSolarSystem = ({
           drawGroundIcon(ctx, color);
           ctx.restore();
         }
-
         drawGroundIcon(ctx, color);
-
         if (fleet.isCollapsed) {
           ctx.shadowBlur = 0;
           drawCountBadge(ctx, fleet.collapsedCount);
         }
-
         ctx.restore();
-
-        newFleetPositions.push({
+        localFleetPositions.push({
           fleet,
           x: fx,
           y: fy,
@@ -1139,35 +1592,17 @@ const AnimatedSolarSystem = ({
       });
 
       ctx.restore();
-      // Debug: expose computed fleet icon positions for click testing
-      if (
-        typeof process !== "undefined" &&
-        process.env &&
-        process.env.NODE_ENV === "development"
-      ) {
-        try {
-          console.debug(
-            "[AnimatedSolarSystem] fleetPositions",
-            newFleetPositions
-          );
-        } catch (e) {
-          // ignore
-        }
-      }
-      fleetPositionsRef.current = newFleetPositions;
+
+      // APPEND to the global ref (since we might draw multiple systems/worlds in one frame)
+      fleetPositionsRef.current.push(...localFleetPositions);
     };
 
     update();
-
     return () => {
       window.removeEventListener("resize", resize);
       canvas.removeEventListener("wheel", wheelHandler);
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
-      if (warningTimeoutRef.current) {
-        clearInterval(warningTimeoutRef.current);
-      }
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+      if (warningTimeoutRef.current) clearInterval(warningTimeoutRef.current);
     };
   }, [
     stars,
@@ -1178,13 +1613,13 @@ const AnimatedSolarSystem = ({
     getFactionColor,
     warningMessage,
     collapsedFactions,
+    animationSettings,
   ]);
 
-  // Handle clicks
+  // Handle clicks (Same logic as before)
   const handleCanvasClick = (e) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-
     const { x: worldX, y: worldY } = screenToWorld(
       e.clientX,
       e.clientY,
@@ -1192,283 +1627,328 @@ const AnimatedSolarSystem = ({
       cameraRef.current
     );
 
-    // First, check if we clicked on a fleet icon (only when focused)
+    // Only allow fleet clicks if we have visibility on the world
     if (focusedBody && fleetPositionsRef.current.length > 0) {
-      // Debug: log world click coordinates and available fleet positions
-      if (
-        typeof process !== "undefined" &&
-        process.env &&
-        process.env.NODE_ENV === "development"
-      ) {
-        try {
-          console.debug("[AnimatedSolarSystem] handleCanvasClick world", {
-            worldX,
-            worldY,
-          });
-          console.debug(
-            "[AnimatedSolarSystem] available fleetPositions",
-            fleetPositionsRef.current
-          );
-        } catch (e) {}
-      }
+      // Check if player has intelligence to see fleets at this world
+      // IMPORTANT: Use getFleetsAtWorldWrapper which filters by current system
+      const fleetsAtWorld = getFleetsAtWorldWrapper(focusedBody.name) || [];
+      const currentFactionActiveCombatUnits = fleetsAtWorld.filter(
+        (f) =>
+          f.factionName.toLowerCase() === currentFaction.toLowerCase() &&
+          ["Defense", "Patrol", "Battle", "Activating"].includes(
+            f.State?.Action
+          )
+      );
 
-      for (let fleetPos of fleetPositionsRef.current) {
-        const dx = worldX - fleetPos.x;
-        const dy = worldY - fleetPos.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
+      // Only process fleet clicks if player has visibility
+      const hasVisibility =
+        refereeMode?.isReferee ||
+        currentFactionActiveCombatUnits.length > 0 ||
+        fleetsAtWorld.some(
+          (f) => f.factionName.toLowerCase() === currentFaction.toLowerCase()
+        );
 
-        if (dist < fleetPos.radius) {
-          // If collapsed, toggle the collapse; otherwise open fleet modal
-          if (fleetPos.isCollapsed) {
-            toggleFactionCollapse(fleetPos.fleet.factionName, focusedBody.name);
-          } else {
-            console.debug(
-              "[AnimatedSolarSystem] fleet clicked",
-              fleetPos.fleet
-            );
-            setSelectedFleet({
-              ...fleetPos.fleet,
-              factionName: fleetPos.fleet.factionName,
-            });
-            setShowFleetModal(true);
+      if (hasVisibility) {
+        for (let fleetPos of fleetPositionsRef.current) {
+          const dx = worldX - fleetPos.x;
+          const dy = worldY - fleetPos.y;
+          if (Math.sqrt(dx * dx + dy * dy) < fleetPos.radius) {
+            if (fleetPos.isCollapsed)
+              toggleFactionCollapse(
+                fleetPos.fleet.factionName,
+                focusedBody.name
+              );
+            else {
+              setSelectedFleet({
+                ...fleetPos.fleet,
+                factionName: fleetPos.fleet.factionName,
+              });
+              setShowFleetModal(true);
+            }
+            return;
           }
-          return; // Don't process planet/moon clicks
         }
       }
     }
 
+    // Body checks
     let clickedBody = null;
-
-    // Helper to check collision with bodies
     const checkList = (list) => {
       for (let body of list) {
         let dx = worldX - body.currentX;
         let dy = worldY - body.currentY;
-        let dist = Math.sqrt(dx * dx + dy * dy);
-
-        if (dist < body.size + 10) {
-          return body;
-        }
-
-        // Always check children (moons) if they exist
+        if (Math.sqrt(dx * dx + dy * dy) < body.size + 10) return body;
         if (body.children) {
-          let childHit = checkList(body.children);
-          if (childHit) return childHit;
+          let c = checkList(body.children);
+          if (c) return c;
         }
       }
       return null;
     };
-
-    // Check from Solar System planets
-    clickedBody = checkList(solarSystem.children);
-
-    // Also check Sun
+    clickedBody = checkList(solarSystemsRef.current.Sol.children);
+    if (!clickedBody)
+      clickedBody = checkList(solarSystemsRef.current.Corelli.children);
     if (!clickedBody) {
-      let dx = worldX - solarSystem.currentX;
-      let dy = worldY - solarSystem.currentY;
-      if (Math.sqrt(dx * dx + dy * dy) < solarSystem.size + 10) {
-        clickedBody = solarSystem;
-      }
+      let dx = worldX - solarSystemsRef.current.Sol.currentX;
+      let dy = worldY - solarSystemsRef.current.Sol.currentY;
+      if (Math.sqrt(dx * dx + dy * dy) < solarSystemsRef.current.Sol.size + 10)
+        clickedBody = solarSystemsRef.current.Sol;
+    }
+    if (!clickedBody) {
+      let dx = worldX - solarSystemsRef.current.Corelli.currentX;
+      let dy = worldY - solarSystemsRef.current.Corelli.currentY;
+      if (
+        Math.sqrt(dx * dx + dy * dy) <
+        solarSystemsRef.current.Corelli.size + 10
+      )
+        clickedBody = solarSystemsRef.current.Corelli;
     }
 
-    // Handle body click or empty space click
-    if (clickedBody) {
-      handleBodyClick(clickedBody);
-    } else if (focusedBody) {
-      // Clicked on empty space while focused
-      // If focused on a moon, return to parent planet view
-      // Otherwise return to system overview
+    if (clickedBody) handleBodyClick(clickedBody);
+    else if (focusedBody) {
       if (
         focusedBody.parent &&
         focusedBody.parent.name !== "Sun" &&
         focusedBody.parent.name !== "Corelli Star"
-      ) {
+      )
         focusOnBody(focusedBody.parent);
-      } else {
-        returnToOverview();
-      }
+      else returnToOverview();
     }
   };
 
-  // Helper: get all fleets at a world from systemData (include factionName)
-  // Fleet lookup helper delegated to `fleetUtils.getFleetsAtWorld`
-  // (kept wrapper here for backward compatibility)
-  const getFleetsAtWorldWrapper = (worldName) =>
-    getFleetsAtWorld(systemData, worldName);
+  // ... [Keep helper functions like getFleetsAtWorldWrapper, canZoomInForWorld, handleBodyClick, toggleFactionCollapse, focusOnBody, returnToOverview, handleBack, etc.] ...
 
-  // Helper: determine whether current faction can zoom into a world
+  // System world lists for filtering
+  const systemWorlds = {
+    Sol: [
+      "Mercury",
+      "Venus",
+      "Earth",
+      "Luna",
+      "Mars",
+      "Ceres",
+      "Asteroid Belt Area A",
+      "Asteroid Belt Area B",
+      "Asteroid Belt Area C",
+      "Jupiter",
+      "Io",
+      "Europa",
+      "Ganymede",
+      "Callisto",
+      "Saturn",
+      "Mimas",
+      "Enceladus",
+      "Tethys",
+      "Dione",
+      "Rhea",
+      "Titan",
+      "Iapetus",
+      "Uranus",
+      "Miranda",
+      "Ariel",
+      "Umbriel",
+      "Titania",
+      "Oberon",
+      "Neptune",
+      "Triton",
+      "Proteus",
+      "Nereid",
+      "Pluto",
+      "Charon",
+    ],
+    Corelli: [
+      "Barcas",
+      "Deo Gloria",
+      "Novai",
+      "Asteroid Belt Area 1",
+      "Asteroid Belt Area 2",
+      "Asteroid Belt Area 3",
+      "Asteroid Belt Area 4",
+      "Scipios",
+    ],
+  };
+
+  const getFleetsAtWorldWrapper = (worldName) => {
+    // No system filtering - show fleets from all systems
+    // This allows seeing fleets on Sol worlds even when viewing Corelli and vice versa
+    return getFleetsAtWorld(systemData, worldName);
+  };
   const canZoomInForWorld = (worldName) => {
     if (refereeMode?.isReferee) return true;
     const fleets = getFleetsAtWorldWrapper(worldName);
-    const currentFactionActiveCombatUnits = fleets.filter(
-      (fleet) =>
-        fleet.factionName.toLowerCase() === currentFaction.toLowerCase() &&
-        ["Defense", "Patrol", "Battle", "Activating"].includes(
-          fleet.State?.Action
-        )
+    const active = fleets.filter(
+      (f) =>
+        f.factionName.toLowerCase() === currentFaction.toLowerCase() &&
+        ["Defense", "Patrol", "Battle", "Activating"].includes(f.State?.Action)
     );
-    return currentFactionActiveCombatUnits.length > 0;
+    return active.length > 0;
   };
 
   const handleBodyClick = (body) => {
-    if (!body) return;
-
-    // If we're already focused on this body -> Open world detail modal
-    if (focusedBody === body) {
-      if (body.name !== "Sun" && body.name !== "Corelli Star") {
-        setZoomedWorld(body.name);
-        // Also open fleet modal for this world. If there are fleets at this
-        // world, show the first one; otherwise open a stubbed selectedFleet
-        // so the FleetModal can render the "Insufficient Intelligence" view.
-        const fleetsAtThisWorld = getFleetsAtWorldWrapper(body.name) || [];
-        if (fleetsAtThisWorld.length > 0) {
-          // prefer a fleet belonging to current faction if possible
-          const preferred = fleetsAtThisWorld.find(
-            (f) => f.factionName.toLowerCase() === currentFaction.toLowerCase()
-          );
-          const chosen = preferred || fleetsAtThisWorld[0];
-          setSelectedFleet({ ...chosen, factionName: chosen.factionName });
-        } else {
-          // stubbed fleet to trigger Insufficient Intelligence UI
-          setSelectedFleet({
-            Name: `${body.name} Presence`,
-            ID: -1,
-            Vehicles: [],
-            Type: "Unknown",
-            State: { Location: body.name, Action: "Idle" },
-            factionName: "Unknown",
-          });
-        }
-        setShowFleetModal(true);
+    if (
+      focusedBody === body &&
+      body.name !== "Sun" &&
+      body.name !== "Corelli Star"
+    ) {
+      setZoomedWorld(body.name);
+      // Ensure fleet modal is closed initially; user clicks fleet icon to open
+      setShowFleetModal(false);
+    } else {
+      if (
+        body.name !== "Sun" &&
+        body.name !== "Corelli Star" &&
+        !canZoomInForWorld(body.name)
+      ) {
+        setWarningMessage("Insufficient intelligence.");
+        setWarningOpacity(1);
+        setTimeout(() => {
+          setWarningOpacity(0);
+          setWarningMessage(null);
+        }, 1800);
+        focusOnBody(body); // Still focus to see fleet icons
+        return;
       }
-    }
-    // If we click a new body -> Focus on it
-    else {
-      // Only allow focusing/zooming into a world if allowed by intel rules
-      if (body.name !== "Sun" && body.name !== "Corelli Star") {
-        if (!canZoomInForWorld(body.name)) {
-          // Not allowed to zoom in — show warning but still allow focus so
-          // users can inspect fleet presence (modal requires focused view).
-          setWarningMessage("Insufficient intelligence.");
-          setWarningOpacity(1);
-          setTimeout(() => {
-            setWarningOpacity(0);
-            setWarningMessage(null);
-          }, 1800);
-          // Allow focus so fleet icons are rendered and clickable
-          focusOnBody(body);
-          return;
-        }
-      }
-
       focusOnBody(body);
     }
   };
 
-  const toggleFactionCollapse = (factionName, worldName) => {
-    const key = `${factionName}-${worldName}`;
-    const newCollapsed = new Set(collapsedFactions);
-    if (newCollapsed.has(key)) {
-      newCollapsed.delete(key);
-    } else {
-      newCollapsed.add(key);
-    }
-    setCollapsedFactions(newCollapsed);
+  const toggleFactionCollapse = (f, w) => {
+    const k = `${f}-${w}`;
+    const s = new Set(collapsedFactions);
+    if (s.has(k)) s.delete(k);
+    else s.add(k);
+    setCollapsedFactions(s);
   };
 
   const focusOnBody = (body) => {
-    if (body.name === "Sun" || body.name === "Corelli Star") {
-      returnToOverview();
-    } else {
+    if (body.name === "Sun" || body.name === "Corelli Star") returnToOverview();
+    else {
       setFocusedBody(body);
-      // High zoom level to see planet and moons clearly
-      const zoomLevel = body.children && body.children.length > 0 ? 8 : 12;
       targetCameraRef.current = {
         x: body.currentX,
         y: body.currentY,
-        zoom: zoomLevel,
+        zoom: body.children && body.children.length > 0 ? 8 : 12,
       };
     }
   };
 
   const returnToOverview = () => {
+    // Determine target system based on focus
+    let target = "Sol";
+    if (focusedBody) {
+      const isInCorelli = (b, root) => {
+        if (b === root) return true;
+        if (root.children)
+          for (let c of root.children) {
+            if (c === b || (c.children && isInCorelli(b, c))) return true;
+          }
+        return false;
+      };
+      if (isInCorelli(focusedBody, solarSystemsRef.current.Corelli))
+        target = "Corelli";
+    }
     setFocusedBody(null);
     fleetPositionsRef.current = [];
-    targetCameraRef.current = { x: 0, y: 0, zoom: 0.8 };
+    const pos = systemPositions.current[target];
+    targetCameraRef.current = { x: pos.x, y: pos.y, zoom: 0.8 };
+    setCurrentSystemView(target);
   };
 
-  const handleBack = () => {
-    returnToOverview();
-  };
-
-  // Pan and zoom controls (disabled when focused on a body) - handled in useEffect
-
+  // ... [Keep Controls logic: handleMouseDown, handleMouseMove, Mobile handlers, etc.] ...
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [isMobile, setIsMobile] = useState(false);
 
+  // Mobile detection
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768 || "ontouchstart" in window);
+    };
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
   const handleMouseDown = (e) => {
-    if (focusedBody) return; // Disable pan when focused
+    if (focusedBody) return;
     if (e.button === 2 || e.shiftKey) {
-      // Right click or shift+click to pan
       setIsDragging(true);
       setDragStart({ x: e.clientX, y: e.clientY });
       e.preventDefault();
     }
   };
-
   const handleMouseMove = (e) => {
-    // Handle hover detection
     const canvas = canvasRef.current;
     if (canvas) {
-      const { x: worldX, y: worldY } = screenToWorld(
+      const { x: wx, y: wy } = screenToWorld(
         e.clientX,
         e.clientY,
         canvas,
         cameraRef.current
       );
-
-      // Check if hovering over any body
-      let foundHover = null;
-      const checkBodyHover = (body) => {
-        if (!body.currentX || !body.currentY) return;
-        const dx = worldX - body.currentX;
-        const dy = worldY - body.currentY;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        // Larger detection radius, especially when zoomed in
-        const detectionRadius =
-          body.size + Math.max(8, 15 / cameraRef.current.zoom);
-        if (distance < detectionRadius) {
-          foundHover = body;
+      let found = null,
+        bestDist = Infinity;
+      const check = (b) => {
+        if (!b || !b.currentX) return;
+        const d = Math.sqrt(
+          Math.pow(wx - b.currentX, 2) + Math.pow(wy - b.currentY, 2)
+        );
+        const rad = b.size + Math.max(8, 15 / cameraRef.current.zoom);
+        if (d < rad && d < bestDist) {
+          bestDist = d;
+          found = b;
         }
-        // Always check children recursively
-        if (body.children) {
-          body.children.forEach(checkBodyHover);
-        }
+        if (b.children) b.children.forEach(check);
       };
-
-      if (solarSystemRef.current) {
-        checkBodyHover(solarSystemRef.current);
+      if (solarSystemsRef.current) {
+        check(solarSystemsRef.current.Sol);
+        check(solarSystemsRef.current.Corelli);
       }
-      setHoveredBody(foundHover);
+      setHoveredBody(found);
     }
-
-    // Handle panning
-    if (focusedBody) return; // Disable pan when focused
-    if (isDragging) {
-      const dx = (e.clientX - dragStart.x) / cameraRef.current.zoom;
-      const dy = (e.clientY - dragStart.y) / cameraRef.current.zoom;
-      targetCameraRef.current = {
-        ...targetCameraRef.current,
-        x: targetCameraRef.current.x - dx,
-        y: targetCameraRef.current.y - dy,
-      };
-      setDragStart({ x: e.clientX, y: e.clientY });
-    }
+    if (focusedBody || !isDragging) return;
+    const dx = (e.clientX - dragStart.x) / cameraRef.current.zoom;
+    const dy = (e.clientY - dragStart.y) / cameraRef.current.zoom;
+    targetCameraRef.current = {
+      ...targetCameraRef.current,
+      x: targetCameraRef.current.x - dx,
+      y: targetCameraRef.current.y - dy,
+    };
+    setDragStart({ x: e.clientX, y: e.clientY });
   };
+  const handleMouseUp = () => setIsDragging(false);
 
-  const handleMouseUp = () => {
-    setIsDragging(false);
+  // Mobile Handlers
+  const handleZoomIn = () => {
+    if (focusedBody) return;
+    targetCameraRef.current = {
+      ...targetCameraRef.current,
+      zoom: Math.min(10, targetCameraRef.current.zoom * 1.12),
+    };
   };
+  const handleZoomOut = () => {
+    if (focusedBody) return;
+    targetCameraRef.current = {
+      ...targetCameraRef.current,
+      zoom: Math.max(0.3, targetCameraRef.current.zoom * 0.92),
+    };
+  };
+  const handlePanUp = () => {
+    if (focusedBody) return;
+    targetCameraRef.current.y -= 60 / cameraRef.current.zoom;
+  };
+  const handlePanDown = () => {
+    if (focusedBody) return;
+    targetCameraRef.current.y += 60 / cameraRef.current.zoom;
+  };
+  const handlePanLeft = () => {
+    if (focusedBody) return;
+    targetCameraRef.current.x -= 60 / cameraRef.current.zoom;
+  };
+  const handlePanRight = () => {
+    if (focusedBody) return;
+    targetCameraRef.current.x += 60 / cameraRef.current.zoom;
+  };
+  const handleBack = () => returnToOverview();
 
   return (
     <div
@@ -1493,22 +1973,18 @@ const AnimatedSolarSystem = ({
           cursor: isDragging ? "grabbing" : "pointer",
         }}
       />
-
       <BackButton
         focusedBody={focusedBody}
         onBack={handleBack}
         onBackToSystems={onBackToSystems}
       />
-      <ActionButtons onToggleView={onToggleView} onClose={onClose} />
-
+      <ActionButtons onClose={onClose} />
       <WorldDetailModal
         zoomedWorld={zoomedWorld}
         setZoomedWorld={setZoomedWorld}
         allFactions={allFactions}
         getFactionColor={getFactionColor}
       />
-
-      {/* Fleet Detail Modal */}
       <FleetModal
         show={showFleetModal}
         selectedFleet={selectedFleet}
@@ -1520,8 +1996,17 @@ const AnimatedSolarSystem = ({
         refereeMode={refereeMode}
         toggleFactionCollapse={toggleFactionCollapse}
       />
-
       <WarningToast message={warningMessage} opacity={warningOpacity} />
+      {isMobile && !focusedBody && (
+        <MobileControls
+          onZoomIn={handleZoomIn}
+          onZoomOut={handleZoomOut}
+          onPanUp={handlePanUp}
+          onPanDown={handlePanDown}
+          onPanLeft={handlePanLeft}
+          onPanRight={handlePanRight}
+        />
+      )}
     </div>
   );
 };

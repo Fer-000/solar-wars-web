@@ -85,17 +85,10 @@ const AircraftCalculator = ({ nationName, onRegister }) => {
     },
     wingspan: {
       id: "wingspan",
-      label: "Wingspan (m)",
+      label: "Wingspan (m) - (only if longer)",
       type: "number",
       num_type: "ufloat",
       default: 20,
-    },
-    size_basis: {
-      id: "size_basis",
-      label: "Size Basis",
-      type: "select",
-      options: { length: "Length", wingspan: "Wingspan" },
-      default: "length",
     },
     type: {
       id: "type",
@@ -115,14 +108,6 @@ const AircraftCalculator = ({ nationName, onRegister }) => {
       label: "Guns / Cannons (count)",
       type: "number",
       num_type: "uint",
-      default: 0,
-    },
-    armor: {
-      id: "armor",
-      label: "Armor Level",
-      type: "number",
-      num_type: "uint",
-      range: { min: 0, max: 10 },
       default: 0,
     },
     stealth: {
@@ -194,24 +179,18 @@ const AircraftCalculator = ({ nationName, onRegister }) => {
       num_type: "ufloat",
       default: 0.9,
     },
-    mach: {
-      id: "mach",
-      label: "Mach (flat add)",
-      type: "number",
-      num_type: "ufloat",
-      default: 0,
-    },
     speed: {
       id: "speed",
       label: "Space Speed",
       type: "select",
       options: {
+        na: "n/a",
         slow: "slow",
         medium: "medium",
         fast: "fast",
         very_fast: "very_fast",
       },
-      default: "medium",
+      default: "na",
     },
     shield: { id: "shield", label: "Shield", type: "bool", default: false },
     other: {
@@ -233,7 +212,6 @@ const AircraftCalculator = ({ nationName, onRegister }) => {
     const {
       length = 20,
       wingspan = 20,
-      size_basis = "length",
       type: role = "fighter",
       weapons: has_weapons = false,
       guns = 0,
@@ -246,16 +224,16 @@ const AircraftCalculator = ({ nationName, onRegister }) => {
       shield = false,
       systems = 0,
       capability = "none",
-      speed_mach = 0,
-      mach = 0,
-      speed = "medium",
+      speed_mach = 0.9,
+      speed = "na",
       other = 0,
     } = pv;
 
-    const use_length = size_basis === "length";
-    const use_wingspan = size_basis === "wingspan";
+    // Auto-determine size_basis: use whichever is longer
+    const use_length = length >= wingspan;
+    const use_wingspan = wingspan > length;
 
-    const size = use_length ? length : use_wingspan ? wingspan : length;
+    const size = use_length ? length : wingspan;
 
     // Base calculations
     let Base_ER = Math.pow(size, 2) / 120 + size * 220000 + 15000000;
@@ -388,9 +366,9 @@ const AircraftCalculator = ({ nationName, onRegister }) => {
 
     // Mach flat addition
     if (flight_type === "air") {
-      Base_ER += mach * 6000000;
+      Base_ER += speed_mach * 6000000;
     } else if (flight_type === "hybrid") {
-      Base_ER += mach * 4000000;
+      Base_ER += speed_mach * 4000000;
     } else if (flight_type === "space") {
       const speed_dict = {
         slow: 2000000,
