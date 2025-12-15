@@ -29,8 +29,7 @@ const hoverStyle = {
   color: "#fff",
 };
 
-export default function ActionButtons({ onToggleView, onClose }) {
-  const [isHoveringGrid, setIsHoveringGrid] = useState(false);
+export default function ActionButtons({ onClose }) {
   const [isHoveringClose, setIsHoveringClose] = useState(false);
 
   return (
@@ -44,19 +43,6 @@ export default function ActionButtons({ onToggleView, onClose }) {
         zIndex: 11,
       }}
     >
-      <button
-        onClick={() => onToggleView && onToggleView()}
-        style={{
-          ...buttonStyle,
-          position: "relative",
-          ...(isHoveringGrid ? hoverStyle : {}),
-        }}
-        onMouseEnter={() => setIsHoveringGrid(true)}
-        onMouseLeave={() => setIsHoveringGrid(false)}
-      >
-        🔳 Grid View
-      </button>
-
       <button
         onClick={() => onClose && onClose()}
         style={{
