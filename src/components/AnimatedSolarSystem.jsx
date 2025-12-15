@@ -6,7 +6,11 @@ import WorldDetailModal from "./AnimatedSolarSystem/WorldDetailModal";
 import FleetModal from "./AnimatedSolarSystem/FleetModal";
 import WarningToast from "./AnimatedSolarSystem/WarningToast";
 import MobileControls from "./AnimatedSolarSystem/MobileControls";
-import { lerpCamera, screenToWorld } from "./AnimatedSolarSystem/camera";
+import {
+  lerpCamera,
+  screenToWorld,
+  worldToScreen,
+} from "./AnimatedSolarSystem/camera";
 import {
   drawSpaceIcon,
   drawGroundIcon,
@@ -1879,20 +1883,26 @@ const AnimatedSolarSystem = ({
   const handleMouseMove = (e) => {
     const canvas = canvasRef.current;
     if (canvas) {
-      const { x: wx, y: wy } = screenToWorld(
-        e.clientX,
-        e.clientY,
-        canvas,
-        cameraRef.current
-      );
+      const rect = canvas.getBoundingClientRect();
+      const localX = e.clientX - rect.left;
+      const localY = e.clientY - rect.top;
       let found = null,
         bestDist = Infinity;
+
+      // Use screen-space distances for robust hover across zoom and systems
       const check = (b) => {
-        if (!b || !b.currentX) return;
-        const d = Math.sqrt(
-          Math.pow(wx - b.currentX, 2) + Math.pow(wy - b.currentY, 2)
+        if (!b || !Number.isFinite(b.currentX) || !Number.isFinite(b.currentY))
+          return;
+        const sp = worldToScreen(
+          b.currentX,
+          b.currentY,
+          canvas,
+          cameraRef.current
         );
-        const rad = b.size + Math.max(8, 15 / cameraRef.current.zoom);
+        const dx = localX - sp.x;
+        const dy = localY - sp.y;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        const rad = Math.max(12, 14); // pixel radius tolerance
         if (d < rad && d < bestDist) {
           bestDist = d;
           found = b;
