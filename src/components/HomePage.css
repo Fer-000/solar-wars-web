@@ -53,7 +53,7 @@
   margin: 0;
   letter-spacing: 8px;
   color: #fff;
-  text-shadow: 0 0 10px var(--color-primary);
+  text-shadow: 0 0 4px var(--color-primary);
   text-transform: uppercase;
   transition: text-shadow 0.3s ease;
 }
@@ -88,7 +88,7 @@
     100% calc(100% - 20px), calc(100% - 20px) 100%, 
     0 100%, 0 20px
   );
-  box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 0 18px rgba(0, 0, 0, 0.35);
   transition: box-shadow 0.3s ease;
 }
 
@@ -201,12 +201,12 @@
 .tech-button.primary {
   background: var(--color-primary);
   color: #000;
-  box-shadow: 0 0 15px var(--color-primary-dim);
+  box-shadow: 0 0 6px var(--color-primary-dim);
 }
 
 .tech-button.primary:hover:not(:disabled) {
   background: #fff;
-  box-shadow: 0 0 25px var(--color-primary);
+  box-shadow: 0 0 8px var(--color-primary);
   transform: translateY(-2px);
 }
 

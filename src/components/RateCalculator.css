@@ -40,7 +40,7 @@
   text-transform: uppercase;
   margin: 0 0 0.5rem 0;
   letter-spacing: 0.1em;
-  text-shadow: 0 0 10px rgba(0, 243, 255, 0.3);
+  text-shadow: 0 0 4px rgba(0, 243, 255, 0.18);
 }
 
 .calculator-header p {
@@ -96,7 +96,7 @@
   outline: none;
   border-bottom-color: var(--neon-cyan);
   background: rgba(0, 243, 255, 0.1);
-  box-shadow: 0 5px 15px -10px rgba(0, 243, 255, 0.2);
+  box-shadow: 0 3px 8px -6px rgba(0, 243, 255, 0.12);
 }
 
 /* Custom Checkbox (Toggle Switch look) */
@@ -138,7 +138,7 @@
 .calculate-btn:hover {
   background: var(--neon-cyan);
   color: #000;
-  box-shadow: 0 0 25px rgba(0, 243, 255, 0.4);
+  box-shadow: 0 0 8px rgba(0, 243, 255, 0.18);
 }
 
 /* Results Section (Holographic Screen) */
@@ -195,7 +195,7 @@
   font-weight: 700;
   font-size: 1.5rem;
   color: var(--neon-green);
-  text-shadow: 0 0 5px rgba(0, 255, 0, 0.5);
+  text-shadow: 0 0 3px rgba(0, 255, 0, 0.3);
 }
 
 /* Name & Register Section */
@@ -220,7 +220,7 @@
 .name-input:focus {
   outline: none;
   border-color: var(--neon-cyan);
-  box-shadow: 0 0 10px rgba(0, 243, 255, 0.2);
+  box-shadow: 0 0 6px rgba(0, 243, 255, 0.12);
 }
 
 .register-btn {
@@ -239,7 +239,7 @@
 .register-btn:hover {
   background: #fff;
   transform: translateX(-2px);
-  box-shadow: 0 0 20px var(--neon-cyan);
+  box-shadow: 0 0 8px var(--neon-cyan);
 }
 
 /* Mobile Responsive */

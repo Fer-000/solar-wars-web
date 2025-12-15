@@ -78,7 +78,7 @@ body, html {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   margin: 0;
-  text-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
+  text-shadow: 0 0 6px rgba(255, 255, 255, 0.06);
 }
 
 .header-section h1 .highlight-text {
@@ -92,7 +92,7 @@ body, html {
   letter-spacing: 0.25em;
   margin-top: 0.5rem;
   text-transform: uppercase;
-  text-shadow: 0 0 10px rgba(0, 243, 255, 0.4);
+  text-shadow: 0 0 6px rgba(0, 243, 255, 0.25);
 }
 
 /* 3. Tech Cards (Angled Corners) */
@@ -143,14 +143,14 @@ body, html {
   width: 64px;
   height: 64px;
   margin-bottom: 1.5rem;
-  filter: drop-shadow(0 0 5px rgba(0, 243, 255, 0.5));
+  filter: drop-shadow(0 0 3px rgba(0, 243, 255, 0.28));
   transition: all 0.3s ease;
 }
 
 .tech-card-wrapper:hover .icon-glow {
   color: var(--neon-cyan);
   transform: scale(1.1);
-  filter: drop-shadow(0 0 15px var(--neon-cyan));
+  filter: drop-shadow(0 0 6px var(--neon-cyan));
 }
 
 .tech-card-content h3 {
@@ -236,8 +236,8 @@ body, html {
 .command-btn:hover {
   background: rgba(0, 243, 255, 0.1);
   border-color: var(--neon-cyan);
-  text-shadow: 0 0 8px var(--neon-cyan);
-  box-shadow: 0 0 20px rgba(0, 243, 255, 0.1);
+  text-shadow: 0 0 4px var(--neon-cyan);
+  box-shadow: 0 0 8px rgba(0, 243, 255, 0.06);
 }
 
 .btn-icon svg {
@@ -252,4 +252,12 @@ body, html {
   .tech-card-wrapper { height: 180px; }
   .bottom-dock { flex-direction: row; gap: 1rem; padding-bottom: 2rem; }
   .command-btn { padding: 1rem; font-size: 0.9rem; }
+
+  /* Ensure the stardate in the top-bar doesn't overlap the centered welcome header on small screens */
+  .dashboard-content {
+    padding-top: 4rem; /* increase top padding to make room for the absolute top-bar */
+  }
+  .top-bar {
+    top: 1rem; /* pull the stardate slightly closer to the top on mobile */
+  }
 }
