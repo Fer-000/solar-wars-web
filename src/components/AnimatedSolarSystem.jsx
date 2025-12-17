@@ -432,6 +432,7 @@ const AnimatedSolarSystem = ({
   allFactions = {},
   systemData = {},
   currentFaction = "",
+  timeScale = 0.0008, // Speed of time progression, 1 for pretty speed, 0.0008 for rp realistic
   // --- NEW: Controls animation level ---
   animationSettings = { level: "total" },
 }) => {
@@ -492,37 +493,36 @@ const AnimatedSolarSystem = ({
   }
   const solarSystem = solarSystemsRef.current[systemName];
 
-  // Calculate time offset based on 1982 planetary alignment
-  // 1 IRL month = 1 game year (same as original simulation)
+  // --- REPLACED: Date Alignment Logic ---
   useEffect(() => {
-    // Anchor the alignment to the same real 1982 date but compute offsets
-    // in terms of the in-game stardate produced by `getSolarDate()` so
-    // the simulation follows the star calendar rather than the host clock.
+    // 1. Calculate Game Years elapsed since alignment
     const alignment1982 = new Date(1982, 2, 10); // March 10, 1982
-
-    // Get the stardate representation for the alignment and for now
-    const alignStar = getSolarDate(alignment1982); // [year, month, day]
+    const alignStar = getSolarDate(alignment1982);
     const currentStar = getSolarDate(new Date());
 
     const [alignYear, alignMonth, alignDay] = alignStar;
     const [curYear, curMonth, curDay] = currentStar;
 
-    // months difference in stardate space
+    // Total months elapsed (1 IRL month = 1 Game Year)
     const totalMonths =
       (curYear - alignYear) * 12 +
       (parseInt(curMonth, 10) - parseInt(alignMonth, 10));
 
-    // approximate fractional month progress using days (stardate day strings may be padded)
     const dayDiff = parseInt(curDay, 10) - parseInt(alignDay, 10);
-    const daysInMonthApprox = 30; // use 30 as a reasonable stardate month length
-    const monthProgress = dayDiff / daysInMonthApprox;
+    // Approximation: 30 days per month
+    const monthProgress = dayDiff / 30;
 
-    // Total game years elapsed = stardate months since alignment (1 IRL month = 1 game year mapping preserved)
+    // Total Game Years elapsed
     const gameYears = totalMonths + monthProgress;
-    const gameDays = gameYears * 365;
 
-    // Keep the existing visual scaling factor to match animation speed
-    initialTimeOffset.current = gameDays * 5;
+    // 2. Calibrate Offset
+    // Earth Speed in config = 0.00005 radians per tick
+    // Full Orbit (2 * PI) = 6.28318 radians
+    // Ticks per Orbit = 6.28318 / 0.00005 = ~125,663.7
+    // So, 1 Game Year = 125,663.7 simulation ticks
+    const TICKS_PER_YEAR = 125663.7;
+
+    initialTimeOffset.current = gameYears * TICKS_PER_YEAR;
   }, []);
 
   // --- HELPERS (Defined first to prevent reference errors) ---
@@ -627,23 +627,31 @@ const AnimatedSolarSystem = ({
     }
   };
 
-  // --- UPDATED LOGIC: BIGGER EXPLOSIONS ---
+  // --- REPLACED: BATTLE LOGIC (Supports Multiple Simultaneous Fights) ---
   const updateBattleLogic = (fleetsOnScreen) => {
     if (animationSettings.level !== "total" || !focusedBody) return;
 
     const timeSinceLast = timeRef.current - lastSkirmishSpawnTime.current;
 
-    // 1. SPAWN LOGIC (Rare: 25-50s)
-    if (
-      activeSkirmishesRef.current.length === 0 &&
-      timeSinceLast > Math.random() * 1500 + 1500
-    ) {
+    // 1. SPAWN LOGIC
+    // Determine dynamic cooldown based on activity
+    // If quiet: Wait long (25-50s). If fighting has started: Cascade new fights fast (2-5s)
+    const isQuiet = activeSkirmishesRef.current.length === 0;
+    const cooldown = isQuiet
+      ? Math.random() * 1500 + 1500
+      : Math.random() * 200 + 100;
+
+    // Allow up to 5 simultaneous skirmishes
+    if (activeSkirmishesRef.current.length < 5 && timeSinceLast > cooldown) {
+      // Filter out fleets that are ALREADY fighting
       const busyIds = new Set(
         activeSkirmishesRef.current.flatMap((s) => [
           s.attacker.fleet.ID,
           s.defender.fleet.ID,
         ])
       );
+
+      // Only look at free fleets in Battle mode
       const available = fleetsOnScreen.filter(
         (f) => !busyIds.has(f.fleet.ID) && f.fleet.State?.Action === "Battle"
       );
@@ -655,6 +663,8 @@ const AnimatedSolarSystem = ({
       });
 
       const factionNames = Object.keys(factions);
+
+      // We need at least 2 different factions present among the FREE fleets
       if (factionNames.length >= 2) {
         const f1 =
           factionNames[Math.floor(Math.random() * factionNames.length)];
@@ -667,16 +677,18 @@ const AnimatedSolarSystem = ({
         const defender =
           factions[f2][Math.floor(Math.random() * factions[f2].length)];
 
-        const midX = (attacker.x + defender.x) / 2 + (Math.random() - 0.5) * 40;
-        const midY = (attacker.y + defender.y) / 2 + (Math.random() - 0.5) * 40;
+        // Calculate a random center near the planet, but distinct from other fights
+        // Add larger variance (80) so multiple fights don't overlap perfectly
+        const midX = (attacker.x + defender.x) / 2 + (Math.random() - 0.5) * 80;
+        const midY = (attacker.y + defender.y) / 2 + (Math.random() - 0.5) * 80;
         const axisRotation = Math.random() * Math.PI * 2;
 
+        // Guaranteed Asymmetry
         const tactics = ["FIGURE8", "ORBIT", "DIVING_OVAL", "SINE_WAVE"];
         const t1 = tactics[Math.floor(Math.random() * tactics.length)];
         let t2 = t1;
-        while (t2 === t1) {
+        while (t2 === t1)
           t2 = tactics[Math.floor(Math.random() * tactics.length)];
-        }
 
         const startPhase = Math.random() < 0.3 ? "HEADON" : "APPROACH";
 
@@ -827,7 +839,7 @@ const AnimatedSolarSystem = ({
           ship.angle = blendAngle(ship.angle, moveAngle, 0.15);
         });
 
-        // SHOOTING
+        // SHOOTING (Wide Arc: ~170 degrees per side)
         const angleToDef = Math.atan2(
           defender.currentY - attacker.currentY,
           defender.currentX - attacker.currentX
@@ -836,8 +848,8 @@ const AnimatedSolarSystem = ({
         while (diffA > Math.PI) diffA -= Math.PI * 2;
         while (diffA < -Math.PI) diffA += Math.PI * 2;
 
-        if (Math.abs(diffA) < 2.5 && Math.random() < 0.08) {
-          if (Math.random() < 0.3) spawnSalvo(attacker, defender);
+        if (Math.abs(diffA) < 3.0 && Math.random() < 0.08) {
+          if (Math.random() < 0.2) spawnSalvo(attacker, defender);
           else spawnProjectile(attacker, defender, "LASER");
         }
 
@@ -849,8 +861,8 @@ const AnimatedSolarSystem = ({
         while (diffD > Math.PI) diffD -= Math.PI * 2;
         while (diffD < -Math.PI) diffD += Math.PI * 2;
 
-        if (Math.abs(diffD) < 2.5 && Math.random() < 0.08) {
-          if (Math.random() < 0.3) spawnSalvo(defender, attacker);
+        if (Math.abs(diffD) < 3.0 && Math.random() < 0.08) {
+          if (Math.random() < 0.2) spawnSalvo(defender, attacker);
           else spawnProjectile(defender, attacker, "LASER");
         }
 
@@ -913,7 +925,6 @@ const AnimatedSolarSystem = ({
         );
         if (dist < 10) {
           p.life = 0;
-          // INCREASED EXPLOSION SIZE TO 3.5x
           if (!p.isMiss) spawnExplosion(destX, destY, 3.5);
         }
       }
@@ -1140,7 +1151,7 @@ const AnimatedSolarSystem = ({
     canvas.addEventListener("wheel", wheelHandler, { passive: false });
 
     const update = () => {
-      timeRef.current += 1;
+      timeRef.current += timescale;
       cameraRef.current = lerpCamera(
         cameraRef.current,
         targetCameraRef.current,

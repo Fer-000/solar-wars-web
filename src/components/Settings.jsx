@@ -185,12 +185,12 @@ const Settings = ({ onBack, userSettings = {}, onSettingsChange }) => {
               <div className="credit-item">
                 <span className="credit-role"></span>
                 <span className="credit-name">
-                  Art from Charcoal and Vijasa
+                  Art from Charcoal, Vijasa and omegafleet
                 </span>
               </div>
               <div className="credit-item">
                 <span className="credit-role">VERSION</span>
-                <span className="credit-name">0.7w</span>
+                <span className="credit-name">0.8w</span>
               </div>
             </div>
           </div>
