@@ -1151,7 +1151,7 @@ const AnimatedSolarSystem = ({
     canvas.addEventListener("wheel", wheelHandler, { passive: false });
 
     const update = () => {
-      timeRef.current += timescale;
+      timeRef.current += timeScale;
       cameraRef.current = lerpCamera(
         cameraRef.current,
         targetCameraRef.current,
