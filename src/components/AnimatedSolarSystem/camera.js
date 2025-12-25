@@ -27,3 +27,4 @@ export function worldToScreen(wx, wy, canvas, camera) {
   const sy = (wy - camera.y) * camera.zoom + height / 2;
   return { x: sx, y: sy };
 }
+

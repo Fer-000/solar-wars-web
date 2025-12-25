@@ -1,4 +1,10 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
+import FleetModalHeader from "./FleetModal/FleetModalHeader";
+import FleetSideBar from "./FleetModal/FleetSideBar";
+import FleetModalManifest from "./FleetModal/FleetManifest";
+import LocationSelectionModal from "./FleetModal/LocationSelectionModal";
+import ShipTransferModal from "./FleetModal/ShipTransferModal";
+import databaseService from "../../services/database";
 
 export default function FleetModal({
   show,
@@ -12,6 +18,203 @@ export default function FleetModal({
   toggleFactionCollapse,
 }) {
   if (!show || !selectedFleet) return null;
+
+  const [operationalMode, setOperationalMode] = useState(
+    selectedFleet?.State?.Action || "Idle"
+  );
+  const [editMode, setEditMode] = useState(false);
+  const [showLocationModal, setShowLocationModal] = useState(false);
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Update operational mode when fleet changes
+  useEffect(() => {
+    if (selectedFleet) {
+      setOperationalMode(selectedFleet.State?.Action || "Idle");
+    }
+  }, [selectedFleet?.ID]);
+
+  const isOwnFleet =
+    selectedFleet.factionName.toLowerCase() === currentFaction.toLowerCase();
+
+  // Save operational mode to database
+  const handleSaveOperationalMode = async (newMode) => {
+    if (!isOwnFleet) return;
+
+    try {
+      setIsSaving(true);
+      const fleets = await databaseService.getFleets(
+        "The Solar Wars",
+        currentFaction
+      );
+      const fleetIndex = fleets.findIndex((f) => f.ID === selectedFleet.ID);
+
+      if (fleetIndex !== -1) {
+        fleets[fleetIndex].State = {
+          ...fleets[fleetIndex].State,
+          Action: newMode,
+        };
+
+        await databaseService.updateFleets(
+          "The Solar Wars",
+          currentFaction,
+          fleets
+        );
+
+        // Update local state
+        setOperationalMode(newMode);
+        console.log(`Fleet ${selectedFleet.Name} action updated to ${newMode}`);
+      }
+    } catch (error) {
+      console.error("Failed to save operational mode:", error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Handle location change
+  const handleLocationChange = async (newLocation) => {
+    if (!isOwnFleet) return;
+
+    try {
+      setIsSaving(true);
+      const fleets = await databaseService.getFleets(
+        "The Solar Wars",
+        currentFaction
+      );
+      const fleetIndex = fleets.findIndex((f) => f.ID === selectedFleet.ID);
+
+      if (fleetIndex !== -1) {
+        fleets[fleetIndex].State = {
+          ...fleets[fleetIndex].State,
+          Location: newLocation,
+        };
+
+        await databaseService.updateFleets(
+          "The Solar Wars",
+          currentFaction,
+          fleets
+        );
+
+        // Don't change operational mode when changing location
+        setShowLocationModal(false);
+        console.log(`Fleet ${selectedFleet.Name} moving to ${newLocation}`);
+
+        // Close modal to refresh
+        setTimeout(() => onClose(), 500);
+      }
+    } catch (error) {
+      console.error("Failed to change location:", error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Handle ship transfer
+  const handleShipTransfer = async (targetFleetId, transferAmounts) => {
+    if (!isOwnFleet) return;
+
+    try {
+      setIsSaving(true);
+      const fleets = await databaseService.getFleets(
+        "The Solar Wars",
+        currentFaction
+      );
+      const sourceIndex = fleets.findIndex((f) => f.ID === selectedFleet.ID);
+      const targetIndex = fleets.findIndex((f) => f.ID === targetFleetId);
+
+      if (sourceIndex === -1 || targetIndex === -1) {
+        console.error("Fleet not found");
+        return;
+      }
+
+      const factionVehicles = allFactions[currentFaction]?.Vehicles || [];
+
+      // Process transfers
+      Object.entries(transferAmounts).forEach(([vehicleId, amount]) => {
+        if (amount <= 0) return;
+
+        // Find vehicle in source fleet
+        const sourceVehicleIndex = fleets[sourceIndex].Vehicles.findIndex(
+          (v) => v.ID === vehicleId
+        );
+        if (sourceVehicleIndex === -1) return;
+
+        const sourceVehicle = fleets[sourceIndex].Vehicles[sourceVehicleIndex];
+        if (sourceVehicle.count < amount) return;
+
+        // Get vehicle data for value calculation
+        const vehicleData = factionVehicles.find((v) => v.ID === vehicleId);
+        if (!vehicleData) return;
+
+        const vehicleValue = vehicleData.Value || {
+          CM: 0,
+          EL: 0,
+          CS: 0,
+          ER: 0,
+        };
+        const vehicleCSCost = vehicleData.CSCost || 0;
+
+        // Subtract from source
+        sourceVehicle.count -= amount;
+        fleets[sourceIndex].Value.CM -= vehicleValue.CM * amount;
+        fleets[sourceIndex].Value.EL -= vehicleValue.EL * amount;
+        fleets[sourceIndex].Value.CS -= vehicleValue.CS * amount;
+        fleets[sourceIndex].Value.ER -= vehicleValue.ER * amount;
+        fleets[sourceIndex].CSCost -= vehicleCSCost * amount;
+
+        // Remove vehicle entry if count is 0
+        if (sourceVehicle.count <= 0) {
+          fleets[sourceIndex].Vehicles.splice(sourceVehicleIndex, 1);
+        }
+
+        // Add to target
+        let targetVehicle = fleets[targetIndex].Vehicles.find(
+          (v) => v.ID === vehicleId
+        );
+        if (!targetVehicle) {
+          targetVehicle = { ID: vehicleId, count: 0 };
+          fleets[targetIndex].Vehicles.push(targetVehicle);
+        }
+        targetVehicle.count += amount;
+        fleets[targetIndex].Value.CM += vehicleValue.CM * amount;
+        fleets[targetIndex].Value.EL += vehicleValue.EL * amount;
+        fleets[targetIndex].Value.CS += vehicleValue.CS * amount;
+        fleets[targetIndex].Value.ER += vehicleValue.ER * amount;
+        fleets[targetIndex].CSCost += vehicleCSCost * amount;
+      });
+
+      await databaseService.updateFleets(
+        "The Solar Wars",
+        currentFaction,
+        fleets
+      );
+
+      setShowTransferModal(false);
+      console.log("Ships transferred successfully");
+
+      // Close and reopen modal to refresh
+      setTimeout(() => onClose(), 500);
+    } catch (error) {
+      console.error("Failed to transfer ships:", error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Get all fleets at the same location for ship transfer
+  const fleetsAtLocation = Object.entries(systemData || {}).reduce(
+    (acc, [factionName, fleets]) => {
+      const locationFleets = fleets.filter(
+        (f) => f.State?.Location === selectedFleet.State?.Location
+      );
+      locationFleets.forEach((fleet) => {
+        acc.push({ ...fleet, factionName });
+      });
+      return acc;
+    },
+    []
+  );
 
   const totalShips = Array.isArray(selectedFleet.Vehicles)
     ? selectedFleet.Vehicles.reduce((sum, v) => sum + (v.count || 0), 0)
@@ -49,534 +252,59 @@ export default function FleetModal({
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div
-          style={{
-            padding: "20px 25px",
-            borderBottom: "1px solid rgba(255, 255, 255, 0.1)",
-            background: "rgba(255, 255, 255, 0.02)",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            flexShrink: 0,
-          }}
-        >
-          <div>
-            <h2
-              style={{
-                margin: 0,
-                color: "#fff",
-                fontSize: "1.8rem",
-                display: "flex",
-                alignItems: "center",
-                gap: "10px",
-              }}
-            >
-              <span
-                style={{ color: getFactionColor(selectedFleet.factionName) }}
-              >
-                {selectedFleet.Name || `Fleet ${selectedFleet.ID}`}
-              </span>
-            </h2>
-            <div
-              style={{
-                color: "#888",
-                fontSize: "0.9rem",
-                marginTop: "5px",
-                textTransform: "uppercase",
-                letterSpacing: "1px",
-              }}
-            >
-              {allFactions[selectedFleet.factionName]?.name ||
-                selectedFleet.factionName}{" "}
-              Command
-            </div>
-          </div>
-          <button
-            onClick={() => onClose && onClose()}
-            style={{
-              background: "transparent",
-              border: "1px solid rgba(255, 255, 255, 0.2)",
-              color: "#fff",
-              width: "36px",
-              height: "36px",
-              borderRadius: "50%",
-              fontSize: "18px",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              transition: "all 0.2s",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = "#f44336";
-              e.currentTarget.style.borderColor = "#f44336";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = "transparent";
-              e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.2)";
-            }}
-          >
-            ✕
-          </button>
-        </div>
+        <FleetModalHeader
+          selectedFleet={selectedFleet}
+          allFactions={allFactions}
+          getFactionColor={getFactionColor}
+          onClose={onClose}
+        />
 
         <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
-          <div
-            style={{
-              width: "35%",
-              padding: "25px",
-              background: "rgba(0, 0, 0, 0.2)",
-              borderRight: "1px solid rgba(255, 255, 255, 0.05)",
-              display: "flex",
-              flexDirection: "column",
-              gap: "20px",
-              overflowY: "auto",
-            }}
-          >
-            <div>
-              <div
-                style={{
-                  fontSize: "0.8rem",
-                  color: "#666",
-                  textTransform: "uppercase",
-                  marginBottom: "8px",
-                }}
-              >
-                Operational Status
-              </div>
-              <div
-                style={{
-                  display: "inline-block",
-                  padding: "6px 12px",
-                  borderRadius: "4px",
-                  background:
-                    selectedFleet.State?.Action === "Battle"
-                      ? "rgba(244, 67, 54, 0.2)"
-                      : "rgba(0, 245, 255, 0.1)",
-                  border:
-                    selectedFleet.State?.Action === "Battle"
-                      ? "1px solid #f44336"
-                      : "1px solid #00f5ff",
-                  color:
-                    selectedFleet.State?.Action === "Battle"
-                      ? "#f44336"
-                      : "#00f5ff",
-                  fontWeight: "bold",
-                  fontSize: "0.9rem",
-                }}
-              >
-                {selectedFleet.State?.Action === "Activating"
-                  ? "ACTIVATING"
-                  : (selectedFleet.State?.Action || "IDLE").toUpperCase()}
-              </div>
-            </div>
+          <FleetSideBar
+            selectedFleet={selectedFleet}
+            currentFaction={currentFaction}
+            toggleFactionCollapse={toggleFactionCollapse}
+            onClose={onClose}
+            operationalMode={operationalMode}
+            onOperationalModeChange={handleSaveOperationalMode}
+            onLocationClick={() => setShowLocationModal(true)}
+            editMode={editMode}
+            setEditMode={setEditMode}
+            onTransferShips={() => setShowTransferModal(true)}
+            isSaving={isSaving}
+          />
 
-            <div>
-              <div
-                style={{
-                  fontSize: "0.8rem",
-                  color: "#666",
-                  textTransform: "uppercase",
-                  marginBottom: "8px",
-                }}
-              >
-                Current Location
-              </div>
-              <div
-                style={{ fontSize: "1.2rem", color: "#fff", fontWeight: "500" }}
-              >
-                {selectedFleet.State?.Location || "Deep Space"}
-              </div>
-              <div
-                style={{ fontSize: "0.9rem", color: "#888", marginTop: "4px" }}
-              >
-                Type: {selectedFleet.Type || "Standard Fleet"}
-              </div>
-            </div>
-
-            {selectedFleet.factionName.toLowerCase() !==
-              currentFaction.toLowerCase() && (
-              <div
-                style={{
-                  marginTop: "auto",
-                  paddingTop: "20px",
-                  borderTop: "1px solid rgba(255,255,255,0.1)",
-                }}
-              >
-                <button
-                  onClick={() => {
-                    toggleFactionCollapse(
-                      selectedFleet.factionName,
-                      selectedFleet.State?.Location
-                    );
-                    onClose && onClose();
-                  }}
-                  style={{
-                    width: "100%",
-                    padding: "12px",
-                    background: "rgba(255, 255, 255, 0.05)",
-                    color: "#ccc",
-                    border: "1px solid rgba(255, 255, 255, 0.1)",
-                    borderRadius: "6px",
-                    cursor: "pointer",
-                    fontSize: "14px",
-                    transition: "all 0.2s",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: "8px",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background =
-                      "rgba(255, 255, 255, 0.1)";
-                    e.currentTarget.style.color = "white";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background =
-                      "rgba(255, 255, 255, 0.05)";
-                    e.currentTarget.style.color = "#ccc";
-                  }}
-                >
-                  <span>▼</span> Collapse Faction Presence
-                </button>
-              </div>
-            )}
-          </div>
-
-          <div
-            style={{
-              flex: 1,
-              display: "flex",
-              flexDirection: "column",
-              background: "rgba(0,0,0,0.1)",
-            }}
-          >
-            <div
-              style={{
-                padding: "15px 25px",
-                borderBottom: "1px solid rgba(255,255,255,0.05)",
-                background: "rgba(0,0,0,0.2)",
-              }}
-            >
-              <h4
-                style={{
-                  margin: 0,
-                  color: "#00f5ff",
-                  textTransform: "uppercase",
-                  letterSpacing: "1px",
-                }}
-              >
-                Fleet Manifest
-              </h4>
-            </div>
-            <div style={{ padding: "0", overflowY: "auto", flex: 1 }}>
-              {(() => {
-                const isCurrentFaction =
-                  selectedFleet.factionName.toLowerCase() ===
-                  currentFaction.toLowerCase();
-
-                const fleetsAtWorld = Object.entries(systemData).reduce(
-                  (acc, [factionName, fleets]) => {
-                    const worldFleets = fleets.filter(
-                      (f) => f.State?.Location === selectedFleet.State?.Location
-                    );
-                    if (worldFleets.length > 0)
-                      acc.push(
-                        ...worldFleets.map((f) => ({ ...f, factionName }))
-                      );
-                    return acc;
-                  },
-                  []
-                );
-
-                const currentFactionActiveCombatUnits = fleetsAtWorld.filter(
-                  (f) =>
-                    f.factionName.toLowerCase() ===
-                      currentFaction.toLowerCase() &&
-                    ["Defense", "Patrol", "Battle", "Activating"].includes(
-                      f.State?.Action
-                    )
-                );
-
-                const fleetHash = (selectedFleet.Name || "")
-                  .split("")
-                  .reduce((a, b) => a + b.charCodeAt(0), 0);
-                const isMocked = fleetHash % 20 === 0;
-                const mockingTitles = [
-                  "Nice Try",
-                  "Not For You",
-                  "Clearance: None",
-                  "Skill Issue",
-                  "Nothing To See",
-                ];
-                const mockTitle =
-                  mockingTitles[fleetHash % mockingTitles.length];
-
-                const hasActiveUnit =
-                  currentFactionActiveCombatUnits.length > 0;
-                const hasIntel = isCurrentFaction || hasActiveUnit;
-
-                if (hasIntel) {
-                  return (
-                    <>
-                      <div
-                        style={{
-                          padding: "15px 25px",
-                          background: "rgba(0, 245, 255, 0.02)",
-                          borderBottom: "1px solid rgba(255,255,255,0.05)",
-                          color: "#aaa",
-                          fontSize: "0.9rem",
-                        }}
-                      >
-                        Total Unit Count:{" "}
-                        <span style={{ color: "#fff", fontWeight: "bold" }}>
-                          {totalShips}
-                        </span>
-                      </div>
-                      {Array.isArray(selectedFleet.Vehicles) &&
-                      selectedFleet.Vehicles.length > 0 ? (
-                        (() => {
-                          const visibleVehicles = refereeMode?.isReferee
-                            ? selectedFleet.Vehicles
-                            : selectedFleet.Vehicles.filter((vehicle) => {
-                                if (isCurrentFaction) return true;
-                                const factionVehicles =
-                                  allFactions[selectedFleet.factionName]
-                                    ?.Vehicles || [];
-                                const vehicleRecord = factionVehicles.find(
-                                  (v) => v.ID === vehicle.ID
-                                );
-                                const isStealth =
-                                  vehicleRecord?.stealth === true ||
-                                  vehicleRecord?.data?.stealth === true;
-                                if (
-                                  isStealth &&
-                                  selectedFleet.State?.Action !== "Battle"
-                                ) {
-                                  return false;
-                                }
-                                return true;
-                              });
-
-                          if (
-                            !isCurrentFaction &&
-                            !refereeMode?.isReferee &&
-                            visibleVehicles.length === 0 &&
-                            totalShips > 0
-                          ) {
-                            return (
-                              <div
-                                style={{
-                                  height: "100%",
-                                  display: "flex",
-                                  flexDirection: "column",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                  background:
-                                    "repeating-linear-gradient(45deg, rgba(0,0,0,0.2), rgba(0,0,0,0.2) 10px, rgba(0,0,0,0.3) 10px, rgba(0,0,0,0.3) 20px)",
-                                }}
-                              >
-                                <div
-                                  style={{
-                                    fontSize: "3rem",
-                                    color: "#f44336",
-                                    opacity: 0.5,
-                                    marginBottom: "10px",
-                                  }}
-                                >
-                                  ⚠
-                                </div>
-                                <h3
-                                  style={{
-                                    color: "#f44336",
-                                    margin: 0,
-                                    textTransform: "uppercase",
-                                    letterSpacing: "2px",
-                                  }}
-                                >
-                                  {isMocked
-                                    ? mockTitle
-                                    : "Insufficient Intelligence"}
-                                </h3>
-                                <p
-                                  style={{
-                                    color: "#888",
-                                    maxWidth: "80%",
-                                    textAlign: "center",
-                                    marginTop: "10px",
-                                  }}
-                                >
-                                  Sensors cannot resolve individual ship
-                                  signatures. <br />
-                                  Assess threat level based on fleet activity.
-                                </p>
-                                <div
-                                  style={{
-                                    marginTop: "20px",
-                                    padding: "8px 16px",
-                                    border: "1px solid #555",
-                                    color: "#555",
-                                    borderRadius: "4px",
-                                    fontFamily: "monospace",
-                                  }}
-                                >
-                                  EST. SIGNAL MASS:{" "}
-                                  {totalShips > 0
-                                    ? `~${totalShips} UNITS`
-                                    : "UNKNOWN"}
-                                </div>
-                              </div>
-                            );
-                          }
-
-                          return (
-                            <div style={{ padding: "10px 25px" }}>
-                              {visibleVehicles.length > 0 ? (
-                                visibleVehicles.map((vehicle, index) => {
-                                  const vehicleData = allFactions[
-                                    selectedFleet.factionName
-                                  ]?.Vehicles?.find((v) => v.ID === vehicle.ID);
-                                  return (
-                                    <div
-                                      key={index}
-                                      style={{
-                                        display: "flex",
-                                        justifyContent: "space-between",
-                                        alignItems: "center",
-                                        padding: "12px 0",
-                                        borderBottom:
-                                          "1px dashed rgba(255,255,255,0.1)",
-                                      }}
-                                    >
-                                      <div>
-                                        <div
-                                          style={{
-                                            color: "#fff",
-                                            fontWeight: "500",
-                                            fontSize: "1rem",
-                                          }}
-                                        >
-                                          {vehicleData?.name ||
-                                            `Class-ID ${vehicle.ID}`}
-                                        </div>
-                                        {vehicleData?.data?.length && (
-                                          <div
-                                            style={{
-                                              fontSize: "0.8rem",
-                                              color: "#666",
-                                            }}
-                                          >
-                                            Length: {vehicleData.data.length}m
-                                          </div>
-                                        )}
-                                      </div>
-                                      <div
-                                        style={{
-                                          background: "rgba(255,255,255,0.1)",
-                                          padding: "4px 10px",
-                                          borderRadius: "4px",
-                                          color: "#00f5ff",
-                                          fontWeight: "bold",
-                                          fontFamily: "monospace",
-                                          fontSize: "1.1rem",
-                                        }}
-                                      >
-                                        {vehicle.count || 0}
-                                      </div>
-                                    </div>
-                                  );
-                                })
-                              ) : (
-                                <div
-                                  style={{
-                                    padding: "30px",
-                                    textAlign: "center",
-                                    color: "#666",
-                                  }}
-                                >
-                                  Empty Fleet Structure
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })()
-                      ) : (
-                        <div
-                          style={{
-                            padding: "30px",
-                            textAlign: "center",
-                            color: "#666",
-                          }}
-                        >
-                          Empty Fleet Structure
-                        </div>
-                      )}
-                    </>
-                  );
-                }
-                return (
-                  <div
-                    style={{
-                      height: "100%",
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      background:
-                        "repeating-linear-gradient(45deg, rgba(0,0,0,0.2), rgba(0,0,0,0.2) 10px, rgba(0,0,0,0.3) 10px, rgba(0,0,0,0.3) 20px)",
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: "3rem",
-                        color: "#f44336",
-                        opacity: 0.5,
-                        marginBottom: "10px",
-                      }}
-                    >
-                      ⚠
-                    </div>
-                    <h3
-                      style={{
-                        color: "#f44336",
-                        margin: 0,
-                        textTransform: "uppercase",
-                        letterSpacing: "2px",
-                      }}
-                    >
-                      {isMocked ? mockTitle : "Insufficient Intelligence"}
-                    </h3>
-                    <p
-                      style={{
-                        color: "#888",
-                        maxWidth: "80%",
-                        textAlign: "center",
-                        marginTop: "10px",
-                      }}
-                    >
-                      Sensors cannot resolve individual ship signatures. <br />
-                      Assess threat level based on fleet activity.
-                    </p>
-                    <div
-                      style={{
-                        marginTop: "20px",
-                        padding: "8px 16px",
-                        border: "1px solid #555",
-                        color: "#555",
-                        borderRadius: "4px",
-                        fontFamily: "monospace",
-                      }}
-                    >
-                      EST. SIGNAL MASS:{" "}
-                      {totalShips > 0 ? `~${totalShips} UNITS` : "UNKNOWN"}
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-          </div>
+          <FleetModalManifest
+            selectedFleet={selectedFleet}
+            currentFaction={currentFaction}
+            systemData={systemData}
+            allFactions={allFactions}
+            refereeMode={refereeMode}
+            totalShips={totalShips}
+          />
         </div>
       </div>
+
+      {/* Location Selection Modal */}
+      {showLocationModal && (
+        <LocationSelectionModal
+          currentLocation={selectedFleet.State?.Location || "Deep Space"}
+          onSelectLocation={handleLocationChange}
+          onClose={() => setShowLocationModal(false)}
+        />
+      )}
+
+      {/* Ship Transfer Modal */}
+      {showTransferModal && (
+        <ShipTransferModal
+          sourceFleet={selectedFleet}
+          allFleetsAtLocation={fleetsAtLocation}
+          allFactions={allFactions}
+          onTransfer={handleShipTransfer}
+          onClose={() => setShowTransferModal(false)}
+          getFactionColor={getFactionColor}
+        />
+      )}
     </div>
   );
 }

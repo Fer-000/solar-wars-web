@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import StarField from "./StarField";
-import TacticalMap from "./TacticalMap";
 import databaseService from "../services/database";
 import globalDB from "../services/GlobalDB";
 import "./CenterPage.css";
@@ -84,7 +83,6 @@ const ArmedForces = ({ onBack, nationName, dbLoaded }) => {
     useState(false);
   const [selectedVehicle, setSelectedVehicle] = useState(null);
   const [allVehicles, setAllVehicles] = useState([]);
-  const [showTacticalMap, setShowTacticalMap] = useState(false);
   const [nationInfo, setNationInfo] = useState({
     name: nationName,
     territory: 0,
@@ -575,14 +573,6 @@ const ArmedForces = ({ onBack, nationName, dbLoaded }) => {
     setShowVehiclesOverviewModal(false);
   };
 
-  const openTacticalMap = () => {
-    setShowTacticalMap(true);
-  };
-
-  const closeTacticalMap = () => {
-    setShowTacticalMap(false);
-  };
-
   // Mobile responsive helper
   const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
 
@@ -654,29 +644,7 @@ const ArmedForces = ({ onBack, nationName, dbLoaded }) => {
               </div>
             </div>
 
-            <div className="sidebar-card" style={{ marginTop: "15px" }}>
-              <button
-                className="tactical-map-btn"
-                onClick={openTacticalMap}
-                disabled={loading}
-                style={{
-                  width: "100%",
-                  background: "linear-gradient(45deg, #00f5ff, #ff6b6b)",
-                  border: "none",
-                  borderRadius: "10px",
-                  padding: "15px",
-                  color: "white",
-                  fontSize: "16px",
-                  fontWeight: "bold",
-                  cursor: "pointer",
-                  transition: "all 0.3s ease",
-                  textShadow: "0 1px 2px rgba(0, 0, 0, 0.5)",
-                  boxShadow: "0 4px 15px rgba(0, 245, 255, 0.3)",
-                }}
-              >
-                Tactical Map
-              </button>
-            </div>
+            {/* Removed Tactical Map button - use main navigation instead */}
           </div>
 
           <div className="center-grid">
@@ -1526,15 +1494,6 @@ const ArmedForces = ({ onBack, nationName, dbLoaded }) => {
           </div>
         )}
       </div>
-
-      {/* Tactical Map Modal */}
-      {showTacticalMap && (
-        <TacticalMap
-          onClose={closeTacticalMap}
-          currentFaction={nationName}
-          dbLoaded={dbLoaded}
-        />
-      )}
     </div>
   );
 };

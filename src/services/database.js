@@ -473,6 +473,39 @@ class DatabaseService {
       return false;
     }
   }
+
+  // Get place/world data from Places collection
+  async getPlaceData(server = "The Solar Wars", worldName) {
+    try {
+      // Get the faction document
+      const factionDoc = await this.getFaction(server, "settings");
+      
+      if (!factionDoc || !factionDoc.Places) {
+        console.warn(`No Places data found in faction settings`);
+        return null;
+      }
+
+      // Navigate to the specific world
+      const placeData = factionDoc.Places[worldName];
+      
+      if (!placeData) {
+        console.warn(`No data found for world: ${worldName}`);
+        return null;
+      }
+
+      return {
+        Claimed: placeData.Claimed,
+        ID: placeData.ID,
+        Resources: placeData.Resources,
+        Size: placeData.Size,
+        Image: placeData.Image,
+        Claims: placeData.Claims, // This is the JSON string
+      };
+    } catch (error) {
+      console.error(`Error fetching place data for ${worldName}:`, error);
+      return null;
+    }
+  }
 }
 
   // Create singleton instance

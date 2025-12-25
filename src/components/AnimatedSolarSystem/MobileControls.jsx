@@ -35,7 +35,7 @@ const MobileControls = ({
     <div
       style={{
         position: "absolute",
-        bottom: "18px",
+        bottom: "90px", // Moved up from 18px to avoid ActionButtons
         left: "50%",
         transform: "translateX(-50%)",
         display: "grid",
@@ -56,7 +56,10 @@ const MobileControls = ({
           e.preventDefault();
           handleButtonPress(onZoomOut);
         }}
-        onClick={onZoomOut}
+        onClick={(e) => {
+          e.stopPropagation();
+          onZoomOut();
+        }}
         aria-label="Zoom Out"
       >
         −
@@ -68,7 +71,10 @@ const MobileControls = ({
           e.preventDefault();
           handleButtonPress(onPanUp);
         }}
-        onClick={onPanUp}
+        onClick={(e) => {
+          e.stopPropagation();
+          onPanUp();
+        }}
         aria-label="Pan Up"
       >
         ▲
@@ -80,7 +86,10 @@ const MobileControls = ({
           e.preventDefault();
           handleButtonPress(onZoomIn);
         }}
-        onClick={onZoomIn}
+        onClick={(e) => {
+          e.stopPropagation();
+          onZoomIn();
+        }}
         aria-label="Zoom In"
       >
         +
@@ -93,7 +102,10 @@ const MobileControls = ({
           e.preventDefault();
           handleButtonPress(onPanLeft);
         }}
-        onClick={onPanLeft}
+        onClick={(e) => {
+          e.stopPropagation();
+          onPanLeft();
+        }}
         aria-label="Pan Left"
       >
         ◀
@@ -105,7 +117,10 @@ const MobileControls = ({
           e.preventDefault();
           handleButtonPress(onPanDown);
         }}
-        onClick={onPanDown}
+        onClick={(e) => {
+          e.stopPropagation();
+          onPanDown();
+        }}
         aria-label="Pan Down"
       >
         ▼
@@ -117,7 +132,10 @@ const MobileControls = ({
           e.preventDefault();
           handleButtonPress(onPanRight);
         }}
-        onClick={onPanRight}
+        onClick={(e) => {
+          e.stopPropagation();
+          onPanRight();
+        }}
         aria-label="Pan Right"
       >
         ▶

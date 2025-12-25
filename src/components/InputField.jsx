@@ -2,15 +2,24 @@ import React from "react";
 
 const InputField = ({ param, value, onChange }) => {
   const handleChange = (e) => {
-    const newValue =
-      param.type === "number"
-        ? param.num_type?.includes("int")
-          ? parseInt(e.target.value) || 0
-          : parseFloat(e.target.value) || 0
-        : param.type === "bool"
-        ? e.target.checked
-        : e.target.value;
-
+    let newValue;
+    if (param.type === "number") {
+      // Allow empty string so user can clear the field
+      if (e.target.value === "") {
+        newValue = "";
+      } else if (param.num_type?.includes("int")) {
+        newValue = parseInt(e.target.value, 10);
+        if (isNaN(newValue)) newValue = "";
+      } else {
+        newValue = parseFloat(e.target.value);
+        if (isNaN(newValue)) newValue = "";
+      }
+    } else if (param.type === "bool") {
+      newValue = e.target.checked;
+    } else {
+      // For text/select, allow empty string
+      newValue = e.target.value === "" ? "" : e.target.value;
+    }
     onChange(param.id, newValue);
   };
 
@@ -21,7 +30,7 @@ const InputField = ({ param, value, onChange }) => {
           <input
             type="number"
             id={param.id}
-            value={value || param.default || 0}
+            value={value === undefined ? param.default ?? "" : value}
             onChange={handleChange}
             min={param.range?.min}
             max={param.range?.max}
@@ -62,7 +71,7 @@ const InputField = ({ param, value, onChange }) => {
           <input
             type="text"
             id={param.id}
-            value={value || param.default || ""}
+            value={value === undefined ? param.default ?? "" : value}
             onChange={handleChange}
             className="rate-input"
             placeholder={param.label}

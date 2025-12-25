@@ -31,6 +31,9 @@ const Settings = ({ onBack, userSettings = {}, onSettingsChange }) => {
   const [themeColor, setThemeColor] = useState(
     userSettings.themeColor || "#00f3ff"
   );
+  const [animationLevel, setAnimationLevel] = useState(
+    userSettings.animationLevel || "total"
+  );
 
   // --- Database Logic (Preserved) ---
   useEffect(() => {
@@ -79,7 +82,7 @@ const Settings = ({ onBack, userSettings = {}, onSettingsChange }) => {
       }
     }
     if (onSettingsChange) {
-      onSettingsChange({ treatment, nationName, themeColor });
+      onSettingsChange({ treatment, nationName, themeColor, animationLevel });
     }
     onBack();
   };
@@ -153,6 +156,17 @@ const Settings = ({ onBack, userSettings = {}, onSettingsChange }) => {
               </div>
             </div>
             <div className="setting-group">
+              <label>ANIMATION LEVEL</label>
+              <select
+                className="tech-select"
+                value={animationLevel}
+                onChange={(e) => setAnimationLevel(e.target.value)}
+              >
+                <option value="total">FULL ANIMATION</option>
+                <option value="none">STATIC VIEW</option>
+              </select>
+            </div>
+            <div className="setting-group">
               <label>INTERFACE MODE</label>
               <select className="tech-select" defaultValue="dark">
                 <option value="dark">TACTICAL DARK</option>
@@ -190,7 +204,7 @@ const Settings = ({ onBack, userSettings = {}, onSettingsChange }) => {
               </div>
               <div className="credit-item">
                 <span className="credit-role">VERSION</span>
-                <span className="credit-name">0.8w</span>
+                <span className="credit-name">1.0w</span>
               </div>
             </div>
           </div>
