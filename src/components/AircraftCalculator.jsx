@@ -139,7 +139,7 @@ const AircraftCalculator = ({ nationName, onRegister }) => {
     },
     cargo: {
       id: "cargo",
-      label: "Cargo Capacity",
+      label: "Cargo (m^2 2D view)",
       type: "number",
       num_type: "ufloat",
       default: 0,
@@ -384,9 +384,9 @@ const AircraftCalculator = ({ nationName, onRegister }) => {
         1 + Math.pow(wingspan / 45, 2.8) + Math.pow(ordnance_kg / 10000, 2);
       let strategic_multiplier;
       if (role === "bomber" || role === "bomber/transport") {
-        strategic_multiplier = Math.min(base_multiplier, 1.3);
-      } else {
         strategic_multiplier = base_multiplier;
+      } else {
+        strategic_multiplier = Math.min(base_multiplier, 1.3);
       }
       Base_ER *= strategic_multiplier;
     }
