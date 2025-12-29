@@ -150,7 +150,6 @@ const AircraftCalculator = ({ nationName, onRegister }) => {
       type: "bool",
       default: false,
     },
-    drone: { id: "drone", label: "Drone", type: "bool", default: false },
     radar: {
       id: "radar",
       label: "Radar",
@@ -169,7 +168,7 @@ const AircraftCalculator = ({ nationName, onRegister }) => {
       id: "capability",
       label: "Capability",
       type: "select",
-      options: { none: "None", STOL: "STOL", VTOL: "VTOL" },
+      options: { none: "none for helicopters", STOL: "STOL", VTOL: "VTOL" },
       default: "none",
     },
     speed_mach: {
