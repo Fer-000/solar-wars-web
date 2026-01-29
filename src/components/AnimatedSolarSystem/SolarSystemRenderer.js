@@ -80,7 +80,7 @@ export const renderSystemTree = (ctx, body, options, isMoon = false) => {
 
   // 4. Draw Orbit Line (but not for the focused body itself)
   if (shouldRender && body.dist > 0 && focusedBody !== body) {
-    drawOrbit(ctx, cx, cy, body.dist, isMoon);
+    drawOrbit(ctx, cx, cy, body.dist, isMoon, options.faintOrbitLines);
   }
 
   // 5. Draw Body

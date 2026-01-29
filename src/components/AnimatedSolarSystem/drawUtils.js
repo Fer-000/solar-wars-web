@@ -72,10 +72,15 @@ export function drawConnectionLine(ctx, start, end, zoom) {
   ctx.restore();
 }
 
-export function drawOrbit(ctx, x, y, radius, isMoon) {
+export function drawOrbit(ctx, x, y, radius, isMoon, faint = false) {
   ctx.beginPath();
-  ctx.strokeStyle = isMoon ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.1)";
-  ctx.lineWidth = isMoon ? 0.5 : 1;
+  if (faint) {
+    ctx.strokeStyle = isMoon ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.03)";
+    ctx.lineWidth = isMoon ? 0.3 : 0.5;
+  } else {
+    ctx.strokeStyle = isMoon ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.1)";
+    ctx.lineWidth = isMoon ? 0.5 : 1;
+  }
   ctx.arc(x, y, radius, 0, Math.PI * 2);
   ctx.stroke();
 }

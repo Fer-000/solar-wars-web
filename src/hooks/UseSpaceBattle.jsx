@@ -7,6 +7,7 @@ import {
 export const useSpaceBattle = (getFactionColor, animationSettings) => {
   const battleZonesRef = useRef({});
   const lastSpawnTimeRef = useRef(0);
+  const hideVSButton = animationSettings?.hideVSButton || false;
 
   // --- INTERNAL: SPAWN UTILS ---
   const spawnExplosion = (zone, x, y, scale = 1) => {
@@ -45,7 +46,7 @@ export const useSpaceBattle = (getFactionColor, animationSettings) => {
     source,
     target,
     type = "TORPEDO",
-    forceMiss = null
+    forceMiss = null,
   ) => {
     const isMiss = forceMiss !== null ? forceMiss : Math.random() > 0.6;
     const color = getFactionColor
@@ -100,7 +101,7 @@ export const useSpaceBattle = (getFactionColor, animationSettings) => {
     isFocused,
     focusedBodyRadius = 20,
     focusedBodyX = 0,
-    focusedBodyY = 0
+    focusedBodyY = 0,
   ) => {
     // Don't update battles when not focused on a body
     if (!isFocused) {
@@ -113,7 +114,7 @@ export const useSpaceBattle = (getFactionColor, animationSettings) => {
     }
 
     const battleFleets = fleetsOnScreen.filter(
-      (f) => f.fleet.State?.Action === "Battle"
+      (f) => f.fleet.State?.Action === "Battle",
     );
     const battleFleetIds = new Set(battleFleets.map((b) => b.fleet.ID));
 
@@ -252,11 +253,11 @@ export const useSpaceBattle = (getFactionColor, animationSettings) => {
 
         zone.attacker.angle = Math.atan2(
           pA.y - zone.attacker.currentY,
-          pA.x - zone.attacker.currentX
+          pA.x - zone.attacker.currentX,
         );
         zone.defender.angle = Math.atan2(
           pD.y - zone.defender.currentY,
-          pD.x - zone.defender.currentX
+          pD.x - zone.defender.currentX,
         );
 
         if (progress > 0.3 && progress < 0.7 && Math.random() < 0.2) {
@@ -282,16 +283,16 @@ export const useSpaceBattle = (getFactionColor, animationSettings) => {
 
         zone.attacker.angle = Math.atan2(
           zone.defender.currentY - zone.attacker.currentY,
-          zone.defender.currentX - zone.attacker.currentX
+          zone.defender.currentX - zone.attacker.currentX,
         );
         zone.defender.angle = Math.atan2(
           zone.attacker.currentY - zone.defender.currentY,
-          zone.attacker.currentX - zone.defender.currentX
+          zone.attacker.currentX - zone.defender.currentX,
         );
 
         const dist = Math.sqrt(
           Math.pow(zone.attacker.currentX - pA.x, 2) +
-            Math.pow(zone.attacker.currentY - pA.y, 2)
+            Math.pow(zone.attacker.currentY - pA.y, 2),
         );
         if (dist < 10) zone.phase = "FIGHT";
       }
@@ -323,7 +324,7 @@ export const useSpaceBattle = (getFactionColor, animationSettings) => {
 
           const moveAngle = Math.atan2(
             dest.y - ship.currentY,
-            dest.x - ship.currentX
+            dest.x - ship.currentX,
           );
           const blendAngle = (a, b, k) => {
             let d = b - a;
@@ -337,7 +338,7 @@ export const useSpaceBattle = (getFactionColor, animationSettings) => {
         // SHOOTING
         const angleToDef = Math.atan2(
           zone.defender.currentY - zone.attacker.currentY,
-          zone.defender.currentX - zone.attacker.currentX
+          zone.defender.currentX - zone.attacker.currentX,
         );
         let diffA = zone.attacker.angle - angleToDef;
         while (diffA > Math.PI) diffA -= Math.PI * 2;
@@ -351,7 +352,7 @@ export const useSpaceBattle = (getFactionColor, animationSettings) => {
 
         const angleToAtk = Math.atan2(
           zone.attacker.currentY - zone.defender.currentY,
-          zone.attacker.currentX - zone.defender.currentX
+          zone.attacker.currentX - zone.defender.currentX,
         );
         let diffD = zone.defender.angle - angleToAtk;
         while (diffD > Math.PI) diffD -= Math.PI * 2;
@@ -388,7 +389,7 @@ export const useSpaceBattle = (getFactionColor, animationSettings) => {
           p.y += Math.sin(p.angle) * p.speed;
 
           const dist = Math.sqrt(
-            Math.pow(p.x - destX, 2) + Math.pow(p.y - destY, 2)
+            Math.pow(p.x - destX, 2) + Math.pow(p.y - destY, 2),
           );
           if (dist < 10) {
             p.life = 0;
@@ -458,66 +459,69 @@ export const useSpaceBattle = (getFactionColor, animationSettings) => {
       ctx.save();
       ctx.translate(zone.center.x, zone.center.y);
 
-      // 1. The Backing Plate (Crucial fix: Hides the triangles behind the button)
-      // A dark, semi-transparent circle that creates contrast
-      ctx.fillStyle = "rgba(0, 10, 20, 0.85)";
-      ctx.beginPath();
-      ctx.arc(0, 0, 9, 0, Math.PI * 2);
-      ctx.fill();
+      // Only draw VS button if not hidden
+      if (!hideVSButton) {
+        // 1. The Backing Plate (Crucial fix: Hides the triangles behind the button)
+        // A dark, semi-transparent circle that creates contrast
+        ctx.fillStyle = "rgba(0, 10, 20, 0.85)";
+        ctx.beginPath();
+        ctx.arc(0, 0, 9, 0, Math.PI * 2);
+        ctx.fill();
 
-      // 2. Setup Hologram Styles
-      const time = Date.now();
-      const holoColor = "#00f3ff"; // Cyan
-      ctx.shadowColor = holoColor;
-      // We lower the blur to keep it looking "sharp" rather than "foggy"
-      ctx.shadowBlur = 6;
+        // 2. Setup Hologram Styles
+        const time = Date.now();
+        const holoColor = "#00f3ff"; // Cyan
+        ctx.shadowColor = holoColor;
+        // We lower the blur to keep it looking "sharp" rather than "foggy"
+        ctx.shadowBlur = 6;
 
-      // 3. Inner Ring (Static, thin, precise)
-      ctx.strokeStyle = "rgba(0, 243, 255, 0.5)";
-      ctx.lineWidth = 0.5; // Very thin line for high-tech look
-      ctx.setLineDash([]); // Solid
-      ctx.beginPath();
-      ctx.arc(0, 0, 6.5, 0, Math.PI * 2);
-      ctx.stroke();
+        // 3. Inner Ring (Static, thin, precise)
+        ctx.strokeStyle = "rgba(0, 243, 255, 0.5)";
+        ctx.lineWidth = 0.5; // Very thin line for high-tech look
+        ctx.setLineDash([]); // Solid
+        ctx.beginPath();
+        ctx.arc(0, 0, 6.5, 0, Math.PI * 2);
+        ctx.stroke();
 
-      // 4. Rotating Outer Brackets (The dynamic part)
-      ctx.save();
-      ctx.rotate(time / 1500); // Slow rotation
-      ctx.strokeStyle = "#fff"; // White core makes it look like intense light
-      ctx.lineWidth = 1; // Thinner than before
-      ctx.lineCap = "round"; // Rounded ends look more polished
-      ctx.setLineDash([4, 10]); // Dashed look suggests "data stream"
-      ctx.beginPath();
-      ctx.arc(0, 0, 8, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
-
-      // 5. Tech Decorations (Little ticks)
-      // This adds that "Iron Man HUD" complexity without bulk
-      ctx.fillStyle = holoColor;
-      for (let i = 0; i < 4; i++) {
+        // 4. Rotating Outer Brackets (The dynamic part)
         ctx.save();
-        ctx.rotate((Math.PI / 2) * i);
-        ctx.translate(0, -9.5); // Push to edge
-        ctx.fillRect(-0.5, 0, 1, 2); // Tiny ticks
+        ctx.rotate(time / 1500); // Slow rotation
+        ctx.strokeStyle = "#fff"; // White core makes it look like intense light
+        ctx.lineWidth = 1; // Thinner than before
+        ctx.lineCap = "round"; // Rounded ends look more polished
+        ctx.setLineDash([4, 10]); // Dashed look suggests "data stream"
+        ctx.beginPath();
+        ctx.arc(0, 0, 8, 0, Math.PI * 2);
+        ctx.stroke();
         ctx.restore();
+
+        // 5. Tech Decorations (Little ticks)
+        // This adds that "Iron Man HUD" complexity without bulk
+        ctx.fillStyle = holoColor;
+        for (let i = 0; i < 4; i++) {
+          ctx.save();
+          ctx.rotate((Math.PI / 2) * i);
+          ctx.translate(0, -9.5); // Push to edge
+          ctx.fillRect(-0.5, 0, 1, 2); // Tiny ticks
+          ctx.restore();
+        }
+
+        // 6. The Text (Sharp and Clean)
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        // Use a sans-serif font for cleaner readability than monospace
+        ctx.font = "bold italic 7px Arial, sans-serif";
+
+        // Glow pass (soft cyan halo)
+        ctx.shadowBlur = 8;
+        ctx.fillStyle = holoColor;
+        ctx.fillText("VS", 0, 0.5);
+
+        // Sharp pass (pure white, no blur) - makes it readable
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = "#ffffff";
+        ctx.fillText("VS", 0, 0.5);
       }
-
-      // 6. The Text (Sharp and Clean)
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      // Use a sans-serif font for cleaner readability than monospace
-      ctx.font = "bold italic 7px Arial, sans-serif";
-
-      // Glow pass (soft cyan halo)
-      ctx.shadowBlur = 8;
-      ctx.fillStyle = holoColor;
-      ctx.fillText("VS", 0, 0.5);
-
-      // Sharp pass (pure white, no blur) - makes it readable
-      ctx.shadowBlur = 0;
-      ctx.fillStyle = "#ffffff";
-      ctx.fillText("VS", 0, 0.5);
 
       ctx.restore();
 
@@ -587,7 +591,7 @@ export const useSpaceBattle = (getFactionColor, animationSettings) => {
               0,
               p.x,
               p.y,
-              safeRadius
+              safeRadius,
             );
             gradient.addColorStop(0, `rgba(255, 255, 255, ${alpha})`);
             gradient.addColorStop(0.4, `rgba(255, 160, 50, ${alpha * 0.8})`);
