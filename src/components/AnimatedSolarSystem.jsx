@@ -44,6 +44,8 @@ const AnimatedSolarSystem = ({
   onSettings,
   onShipyard,
   onArmedForces,
+  onWallpaperSystem,
+  onWallpaperFight,
   refereeMode = {},
   onBackToSystems,
   onSystemChange,
@@ -948,6 +950,8 @@ const AnimatedSolarSystem = ({
             window.open("https://fer-000.github.io/solar-wars-wiki", "_blank");
           }}
           onShipyard={onShipyard}
+          onWallpaperSystem={onWallpaperSystem}
+          onWallpaperFight={onWallpaperFight}
         />
       )}
 

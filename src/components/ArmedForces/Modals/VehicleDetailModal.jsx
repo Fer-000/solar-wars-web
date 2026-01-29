@@ -65,7 +65,7 @@ export default function VehicleDetailModal({
               <div className="info-section">
                 <h4>MANUFACTURE COST</h4>
                 {vehicle.cost ? (
-                  ["er", "cm", "el", "cs"].map((k) => {
+                  ["ER", "CM", "EL", "CS"].map((k) => {
                     const v = vehicle.cost[k];
                     if (v === undefined || v === null) return null;
                     return (

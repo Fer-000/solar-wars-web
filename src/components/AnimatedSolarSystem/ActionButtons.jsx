@@ -127,6 +127,14 @@ const SwordIcon = () => (
   </svg>
 );
 
+const WallpaperIcon = () => (
+  <svg {...SvgProps}>
+    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+    <circle cx="8.5" cy="8.5" r="1.5"></circle>
+    <polyline points="21 15 16 10 5 21"></polyline>
+  </svg>
+);
+
 // --- Internal Helper ---
 const IconButton = ({ icon: IconComponent, onClick, label }) => {
   const [isHovered, setIsHovered] = useState(false);
@@ -157,8 +165,11 @@ export default function ActionButtons({
   onSettings,
   onWiki,
   onShipyard,
+  onWallpaperSystem,
+  onWallpaperFight,
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [showWallpaperMenu, setShowWallpaperMenu] = useState(false);
   const isAnimated = animationLevel === "total";
 
   return (
@@ -167,7 +178,10 @@ export default function ActionButtons({
       <IconButton
         label={isExpanded ? "Close Menu" : "Menu"}
         icon={isExpanded ? CloseIcon : MenuIcon}
-        onClick={() => setIsExpanded(!isExpanded)}
+        onClick={() => {
+          setIsExpanded(!isExpanded);
+          setShowWallpaperMenu(false);
+        }}
       />
 
       {/* Expanded Buttons */}
@@ -186,6 +200,95 @@ export default function ActionButtons({
           }
         />
       </div>
+      <div style={isExpanded ? styles.expandedButton : styles.collapsedButton}>
+        <IconButton
+          label="Wallpapers"
+          icon={WallpaperIcon}
+          onClick={() => setShowWallpaperMenu(!showWallpaperMenu)}
+        />
+      </div>
+
+      {/* Wallpaper Submenu */}
+      {showWallpaperMenu && isExpanded && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: "0px",
+            right: "60px",
+            display: "flex",
+            gap: "8px",
+            background: "rgba(10, 15, 20, 0.95)",
+            border: "1px solid rgba(0, 245, 255, 0.4)",
+            borderRadius: "8px",
+            padding: "8px",
+            boxShadow: "0 0 20px rgba(0, 245, 255, 0.2)",
+            backdropFilter: "blur(8px)",
+          }}
+        >
+          <button
+            onClick={() => {
+              if (onWallpaperSystem) {
+                onWallpaperSystem();
+                setShowWallpaperMenu(false);
+                setIsExpanded(false);
+              }
+            }}
+            style={{
+              background: "rgba(0, 245, 255, 0.1)",
+              border: "1px solid rgba(0, 245, 255, 0.3)",
+              color: "#00f5ff",
+              padding: "8px 16px",
+              borderRadius: "6px",
+              cursor: "pointer",
+              fontSize: "12px",
+              fontWeight: "500",
+              whiteSpace: "nowrap",
+              transition: "all 0.2s ease",
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.background = "rgba(0, 245, 255, 0.2)";
+              e.target.style.borderColor = "rgba(0, 245, 255, 0.6)";
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.background = "rgba(0, 245, 255, 0.1)";
+              e.target.style.borderColor = "rgba(0, 245, 255, 0.3)";
+            }}
+          >
+            Solar System
+          </button>
+          <button
+            onClick={() => {
+              if (onWallpaperFight) {
+                onWallpaperFight();
+                setShowWallpaperMenu(false);
+                setIsExpanded(false);
+              }
+            }}
+            style={{
+              background: "rgba(0, 245, 255, 0.1)",
+              border: "1px solid rgba(0, 245, 255, 0.3)",
+              color: "#00f5ff",
+              padding: "8px 16px",
+              borderRadius: "6px",
+              cursor: "pointer",
+              fontSize: "12px",
+              fontWeight: "500",
+              whiteSpace: "nowrap",
+              transition: "all 0.2s ease",
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.background = "rgba(0, 245, 255, 0.2)";
+              e.target.style.borderColor = "rgba(0, 245, 255, 0.6)";
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.background = "rgba(0, 245, 255, 0.1)";
+              e.target.style.borderColor = "rgba(0, 245, 255, 0.3)";
+            }}
+          >
+            Space Battle
+          </button>
+        </div>
+      )}
     </div>
   );
 }
