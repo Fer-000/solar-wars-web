@@ -438,6 +438,8 @@ function App() {
               {},
             )}
             getFactionColor={getFactionColor}
+            onWallpaperSystem={() => setCurrentView("wallpaper-system")}
+            onWallpaperFight={() => setCurrentView("wallpaper-fight")}
             onClose={handleTacticalMapClose}
             refereeMode={refereeMode}
             onBackToSystems={() => setSelectedSystem(null)}
@@ -507,6 +509,34 @@ function App() {
           nationName={nationId}
           dbLoaded={dbLoaded}
         />
+        {showLegalModal && (
+          <LegalModal
+            onAccept={() => setShowLegalModal(false)}
+            onReject={() => setShowLegalModal(false)}
+          />
+        )}
+      </>
+    );
+  }
+
+  if (currentView === "wallpaper-system") {
+    return (
+      <>
+        <WallpaperSystem onBack={() => setCurrentView("tactical-map")} />
+        {showLegalModal && (
+          <LegalModal
+            onAccept={() => setShowLegalModal(false)}
+            onReject={() => setShowLegalModal(false)}
+          />
+        )}
+      </>
+    );
+  }
+
+  if (currentView === "wallpaper-fight") {
+    return (
+      <>
+        <WallpaperFight onBack={() => setCurrentView("tactical-map")} />
         {showLegalModal && (
           <LegalModal
             onAccept={() => setShowLegalModal(false)}
