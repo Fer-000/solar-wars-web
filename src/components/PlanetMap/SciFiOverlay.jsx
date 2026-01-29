@@ -11,6 +11,7 @@ const SciFiOverlay = ({
   onToggleMode,
   onSave,
   onShowWorldDetail,
+  readOnly = false,
 }) => {
   const toolIcon = {
     brush: <Icons.Brush />,
@@ -66,22 +67,24 @@ const SciFiOverlay = ({
           </button>
         )}
 
-        {/* Mode Toggle (Edit/View Eye Icon) - Moved Here, No Text */}
-        <button
-          onClick={onToggleMode}
-          style={{
-            ...sciFiBtnStyle,
-            color: mode === "edit" ? SCIFI_CYAN : "#555",
-          }}
-          title={
-            mode === "edit" ? "Switch to View Mode" : "Switch to Edit Mode"
-          }
-        >
-          {mode === "edit" ? <Icons.Edit /> : <Icons.Eye />}
-        </button>
+        {/* Mode Toggle (Edit/View Eye Icon) - hidden when readOnly */}
+        {!readOnly && (
+          <button
+            onClick={onToggleMode}
+            style={{
+              ...sciFiBtnStyle,
+              color: mode === "edit" ? SCIFI_CYAN : "#555",
+            }}
+            title={
+              mode === "edit" ? "Switch to View Mode" : "Switch to Edit Mode"
+            }
+          >
+            {mode === "edit" ? <Icons.Edit /> : <Icons.Eye />}
+          </button>
+        )}
 
-        {/* Tool Selector HUD (Only visible in Edit Mode) */}
-        {mode === "edit" && (
+        {/* Tool Selector HUD (Only visible in Edit Mode and when not readOnly) */}
+        {!readOnly && mode === "edit" && (
           <div style={hudContainerStyle}>
             <div style={sysTextStyle}>Tool: {currentTool}</div>
             <button onClick={onToggleTool} style={bigBtnStyle}>

@@ -1025,6 +1025,7 @@ const AnimatedSolarSystem = ({
               console.error("Error saving map data:", error);
             }
           }}
+          readOnly={true}
         />
       )}
 

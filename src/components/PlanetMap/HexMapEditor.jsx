@@ -21,6 +21,7 @@ const HexMapEditor = ({
   worldName = "Unknown World",
   allFactions = {},
   onShowWorldDetail,
+  readOnly = false,
 }) => {
   // --- UI STATE ---
   const [tool, setTool] = useState("brush");
@@ -242,7 +243,7 @@ const HexMapEditor = ({
           0,
           0,
           s.bgImage.width * s.bgConfig.scaleX,
-          s.bgImage.height * s.bgConfig.scaleY
+          s.bgImage.height * s.bgConfig.scaleY,
         );
       }
 
@@ -359,7 +360,7 @@ const HexMapEditor = ({
     // Touch events store last pos in lastMouse
     const dist = Math.hypot(
       s.lastMouse.x - s.dragStart.x,
-      s.lastMouse.y - s.dragStart.y
+      s.lastMouse.y - s.dragStart.y,
     );
 
     // --- MODAL TRIGGER LOGIC ---
@@ -371,7 +372,7 @@ const HexMapEditor = ({
       const rect = canvasRef.current.getBoundingClientRect();
       const hex = screenToHex(
         s.lastMouse.x - rect.left,
-        s.lastMouse.y - rect.top
+        s.lastMouse.y - rect.top,
       );
 
       if (hex.q !== -1) {
@@ -457,7 +458,7 @@ const HexMapEditor = ({
 
     // Try to find the full faction data from allFactions
     const fullFactionData = Object.values(allFactions).find(
-      (f) => f.Name?.toLowerCase() === hexFaction.name.toLowerCase()
+      (f) => f.Name?.toLowerCase() === hexFaction.name.toLowerCase(),
     );
 
     return fullFactionData || hexFaction;
@@ -480,11 +481,13 @@ const HexMapEditor = ({
         onSave={onSave ? () => onSave(convertMapToData()) : undefined}
         onShowWorldDetail={onShowWorldDetail}
         onToggleMode={() => {
+          if (readOnly) return; // disable mode switching when readOnly
           setMode((m) => (m === "edit" ? "view" : "edit"));
           setSelectedHex(null);
         }}
         currentTool={tool}
         onToggleTool={toggleTool}
+        readOnly={readOnly}
       />
       <HexModal
         data={selectedHex}
