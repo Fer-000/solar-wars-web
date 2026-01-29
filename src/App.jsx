@@ -6,11 +6,30 @@ import ArmedForces from "./components/ArmedForces";
 import AnimatedSolarSystem from "./components/AnimatedSolarSystem";
 import SystemSelection from "./components/SystemSelection";
 import LegalModal from "./components/LegalModal";
+import WallpaperSystem from "./components/WallpaperSystem";
+import WallpaperFight from "./components/WallpaperFight";
 import databaseService from "./services/database";
 import globalDB from "./services/GlobalDB";
 import "./App.css";
 
 function App() {
+  // Check for wallpaper routes
+  const pathname = window.location.pathname.replace(/\/$/, ""); // Remove trailing slash
+
+  if (
+    pathname.endsWith("/wallpaper-system") ||
+    pathname === "/wallpaper-system"
+  ) {
+    return <WallpaperSystem />;
+  }
+
+  if (
+    pathname.endsWith("/wallpaper-fight") ||
+    pathname === "/wallpaper-fight"
+  ) {
+    return <WallpaperFight />;
+  }
+
   const [currentView, setCurrentView] = useState("home");
   const [nationId, setNationId] = useState("");
   const [selectedSystem, setSelectedSystem] = useState(null);
