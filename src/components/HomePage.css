@@ -1,0 +1,295 @@
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800&family=Rajdhani:wght@500;600;700&display=swap');
+
+/* --- Variables for Easy Theming --- */
+:root {
+  --color-primary: #00f3ff;       /* Cyan */
+  --color-primary-dim: rgba(0, 243, 255, 0.1);
+  --color-referee: #ff2a2a;       /* Red */
+  --color-referee-dim: rgba(255, 42, 42, 0.1);
+  --color-bg: #050508;
+  --color-panel: rgba(10, 15, 20, 0.75);
+  --font-tech: 'Rajdhani', 'Courier New', monospace;
+}
+
+/* --- Layout & Background --- */
+.homepage {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--color-bg);
+  overflow: hidden;
+  font-family: var(--font-tech);
+  transition: all 0.5s ease;
+}
+
+/* Subtle grid overlay for tech feel */
+.grid-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-image: 
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 50px 50px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.homepage-content {
+  z-index: 10;
+  max-width: 480px;
+  width: 90%;
+  position: relative;
+}
+
+/* --- Typography --- */
+.title-section {
+  text-align: center;
+  margin-bottom: 2rem;
+  position: relative;
+}
+
+.title-section h1 {
+  font-size: 2.5rem;
+  margin: 0;
+  letter-spacing: 8px;
+  color: #fff;
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 800;
+  text-shadow: 0 0 4px var(--color-primary);
+  text-transform: uppercase;
+  transition: text-shadow 0.3s ease;
+}
+
+/* The scanning line under the title */
+.scan-line {
+  height: 2px;
+  width: 100%;
+  background: linear-gradient(90deg, transparent, var(--color-primary), transparent);
+  margin: 10px 0;
+  opacity: 0.8;
+}
+
+.subtitle {
+  font-size: 0.75rem;
+  color: var(--color-primary);
+  letter-spacing: 2px;
+  opacity: 0.8;
+  font-weight: 600;
+}
+
+/* --- The Tech Card --- */
+.card-container {
+  background: var(--color-panel);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 3rem 2rem;
+  position: relative;
+  /* Cut corners shape */
+  clip-path: polygon(
+    20px 0, 100% 0, 
+    100% calc(100% - 20px), calc(100% - 20px) 100%, 
+    0 100%, 0 20px
+  );
+  box-shadow: 0 0 18px rgba(0, 0, 0, 0.35);
+  transition: box-shadow 0.3s ease;
+}
+
+/* Corner Markers (Decorative bits) */
+.corner-marker {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--color-primary);
+  opacity: 0.5;
+  transition: border-color 0.3s ease;
+}
+.top-left { top: 0; left: 0; border-right: none; border-bottom: none; }
+.top-right { top: 0; right: 0; border-left: none; border-bottom: none; }
+.bottom-left { bottom: 0; left: 0; border-right: none; border-top: none; }
+.bottom-right { bottom: 0; right: 0; border-left: none; border-top: none; }
+
+/* --- Form Elements --- */
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.form-header h3 {
+  margin: 0 0 1rem 0;
+  color: var(--color-referee);
+  text-align: center;
+  letter-spacing: 2px;
+  font-size: 1rem;
+  border-bottom: 1px solid var(--color-referee-dim);
+  padding-bottom: 0.5rem;
+}
+
+.input-group {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+
+.input-group label {
+  font-size: 0.7rem;
+  color: #888;
+  margin-bottom: 5px;
+  letter-spacing: 1px;
+  margin-left: 5px;
+}
+
+.tech-input {
+  background: rgba(0, 0, 0, 0.3);
+  border: none;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  padding: 12px;
+  font-size: 1.1rem;
+  font-family: var(--font-tech);
+  letter-spacing: 1px;
+  transition: all 0.3s ease;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.tech-input:focus {
+  outline: none;
+  background: rgba(0, 243, 255, 0.05);
+  border-bottom-color: var(--color-primary);
+  padding-left: 20px; /* Slide text on focus */
+}
+
+/* Animated bar under input */
+.input-highlight {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  width: 0;
+  background-color: var(--color-primary);
+  transition: width 0.3s ease;
+}
+.tech-input:focus ~ .input-highlight {
+  width: 100%;
+}
+
+/* --- Buttons --- */
+.button-row {
+  display: flex;
+  gap: 1rem;
+}
+
+.tech-button {
+  border: none;
+  padding: 1rem 1.5rem;
+  font-family: var(--font-tech);
+  font-weight: bold;
+  font-size: 0.9rem;
+  letter-spacing: 1px;
+  cursor: pointer;
+  position: relative;
+  /* Angled Button Shape */
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+  transition: all 0.2s ease;
+  text-transform: uppercase;
+}
+
+.tech-button.full-width {
+  width: 100%;
+}
+
+.tech-button.primary {
+  background: var(--color-primary);
+  color: #000;
+  box-shadow: 0 0 6px var(--color-primary-dim);
+}
+
+.tech-button.primary:hover:not(:disabled) {
+  background: #fff;
+  box-shadow: 0 0 8px var(--color-primary);
+  transform: translateY(-2px);
+}
+
+.tech-button.secondary {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #aaa;
+  flex: 1;
+}
+
+.tech-button.secondary:hover {
+  border-color: #fff;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.tech-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: grayscale(1);
+}
+
+/* --- Footer Stats --- */
+.status-footer {
+  margin-top: 2rem;
+  display: flex;
+  justify-content: space-between;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 1rem;
+  font-size: 0.75rem;
+}
+
+.status-item {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.status-label {
+  color: #666;
+}
+
+.status-value {
+  color: var(--color-primary);
+  font-weight: bold;
+}
+.status-value.pending { color: #f5a623; }
+.status-value.ready { color: #2ecc71; }
+
+/* =========================================
+   REFEREE MODE (RED THEME)
+   ========================================= */
+.homepage.mode-referee {
+  /* Override Variables */
+  --color-primary: #ff2a2a; 
+  --color-primary-dim: rgba(255, 42, 42, 0.2);
+}
+
+/* Specific Referee Overrides */
+.mode-referee .scan-line {
+  background: linear-gradient(90deg, transparent, #ff2a2a, transparent);
+}
+
+.mode-referee .subtitle {
+  color: #ff2a2a;
+  animation: blink 2s infinite;
+}
+
+.mode-referee .tech-input:focus {
+  background: rgba(255, 42, 42, 0.05);
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .title-section h1 { font-size: 2.5rem; }
+  .card-container { padding: 2rem 1.5rem; }
+  .button-row { flex-direction: column-reverse; }
+}
