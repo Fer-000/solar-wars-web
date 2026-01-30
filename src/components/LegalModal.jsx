@@ -130,7 +130,7 @@ const LegalModal = ({ onAccept, onReject }) => {
               <h3>2.2. Prohibited Acts (No Copying)</h3>
               <p>
                 You acknowledge that the game's code, art, mechanics, and design
-                are the exclusive property of Fer0.{" "}
+                are the exclusive property of Fer0, with the exception of art and assets contributed and therefore regulated by the licenses above.{" "}
                 <strong>You are strictly prohibited from:</strong>
               </p>
               <ul>
@@ -318,3 +318,4 @@ const LegalModal = ({ onAccept, onReject }) => {
 };
 
 export default LegalModal;
+
